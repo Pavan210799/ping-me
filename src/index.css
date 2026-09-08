@@ -1,0 +1,485 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --bg-page: #f3eee7;
+  --bg-surface: #fffdf9;
+  --bg-card: #ffffff;
+  --bg-muted: #faf7f3;
+  --bg-soft: #f3eee7;
+  --bg-image: #f7f2ec;
+  --bg-hover: #eadecf;
+  --border-line: #e5ddd3;
+  --border-hover: #d8c9b8;
+  --text-ink: #29231f;
+  --text-secondary: #62584f;
+  --text-quiet: #746b64;
+  --text-subtle: #9a9087;
+  --accent: #d95d39;
+  --accent-hover: #b94728;
+  --bubble-sent: #d95d39;
+  --bubble-sent-text: #ffffff;
+  --bubble-received: #ffffff;
+  --chat-canvas: #f7f2ec;
+  --status-online: #2f9e6b;
+  --status-offline: #9a9087;
+  --tick-read: #3d8fd4;
+  --status-failed: #c23b22;
+  --status-success: #2f9e6b;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-page: #14110f;
+  --bg-surface: #1c1916;
+  --bg-card: #241f1c;
+  --bg-muted: #2c2723;
+  --bg-soft: #332e29;
+  --bg-image: #2a2521;
+  --bg-hover: #3a332e;
+  --border-line: #3d3530;
+  --border-hover: #5c5048;
+  --text-ink: #f4efe8;
+  --text-secondary: #d5ccc4;
+  --text-quiet: #b7aea6;
+  --text-subtle: #8f857c;
+  --accent: #e07050;
+  --accent-hover: #f08a6a;
+  --bubble-sent: #e07050;
+  --bubble-sent-text: #fffaf6;
+  --bubble-received: #2c2723;
+  --chat-canvas: #181512;
+  --status-online: #3dba80;
+  --status-offline: #8f857c;
+  --tick-read: #6eb3e8;
+  --status-failed: #ef6b55;
+  --status-success: #3dba80;
+}
+
+@theme inline {
+  --color-page: var(--bg-page);
+  --color-surface: var(--bg-surface);
+  --color-card: var(--bg-card);
+  --color-muted: var(--bg-muted);
+  --color-soft: var(--bg-soft);
+  --color-image: var(--bg-image);
+  --color-hover: var(--bg-hover);
+  --color-line: var(--border-line);
+  --color-line-hover: var(--border-hover);
+  --color-ink: var(--text-ink);
+  --color-secondary: var(--text-secondary);
+  --color-quiet: var(--text-quiet);
+  --color-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-bubble-sent: var(--bubble-sent);
+  --color-bubble-sent-text: var(--bubble-sent-text);
+  --color-bubble-received: var(--bubble-received);
+  --color-canvas: var(--chat-canvas);
+  --color-online: var(--status-online);
+  --color-offline: var(--status-offline);
+  --color-tick-read: var(--tick-read);
+  --color-failed: var(--status-failed);
+  --color-success: var(--status-success);
+  --font-sans: "Manrope", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Manrope", sans-serif;
+  background: var(--bg-page);
+  color: var(--text-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 8px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.82);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes auth-orb-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(36px, -48px) scale(1.08);
+  }
+}
+
+@keyframes auth-orb-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-42px, 28px) scale(0.92);
+  }
+}
+
+@keyframes auth-orb-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(28px, -22px) scale(1.12);
+  }
+}
+
+@keyframes auth-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes auth-spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes auth-bubble {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-18px) rotate(8deg);
+    opacity: 0.7;
+  }
+}
+
+@keyframes chat-rise {
+  0% {
+    transform: translateY(0) scale(0.86);
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.55;
+  }
+  82% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(-118vh) scale(1.08);
+    opacity: 0;
+  }
+}
+
+@keyframes chat-sheen {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(380%);
+  }
+}
+
+@keyframes chat-wave {
+  0%,
+  100% {
+    background-position: 0% 40%, 100% 60%;
+  }
+  50% {
+    background-position: 80% 30%, 20% 80%;
+  }
+}
+
+@keyframes success-ring {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@keyframes success-glow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.95;
+  }
+}
+
+@keyframes success-spark {
+  0%,
+  100% {
+    transform: scale(0.6) translateY(0);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.35) translateY(-6px);
+    opacity: 1;
+  }
+}
+
+@keyframes react-burst {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--burst-x), var(--burst-y)) scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes auth-twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes logo-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes react-pop {
+  0% {
+    transform: scale(0.4) rotate(-18deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.28) rotate(8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes react-float {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-28px) scale(1.45);
+    opacity: 0;
+  }
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-pop-in {
+  animation: pop-in 0.28s ease-out;
+}
+
+.animate-auth-orb-a {
+  animation: auth-orb-a 18s ease-in-out infinite;
+}
+
+.animate-auth-orb-b {
+  animation: auth-orb-b 22s ease-in-out infinite;
+}
+
+.animate-auth-orb-c {
+  animation: auth-orb-c 16s ease-in-out infinite;
+}
+
+.animate-auth-spin {
+  animation: auth-spin 48s linear infinite;
+}
+
+.animate-auth-spin-reverse {
+  animation: auth-spin-reverse 36s linear infinite;
+}
+
+.animate-auth-bubble {
+  animation: auth-bubble 7s ease-in-out infinite;
+}
+
+.animate-auth-twinkle {
+  animation: auth-twinkle 3.4s ease-in-out infinite;
+}
+
+.animate-logo-float {
+  animation: logo-float 4.5s ease-in-out infinite;
+}
+
+.animate-react-pop {
+  animation: react-pop 0.38s ease-out;
+}
+
+.animate-react-float {
+  animation: react-float 0.7s ease-out forwards;
+}
+
+.animate-react-burst {
+  animation: react-burst 0.7s ease-out forwards;
+}
+
+.animate-message-in {
+  animation: message-in 0.28s ease-out;
+}
+
+.typing-dot {
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+
+.auth-grid {
+  background-image:
+    linear-gradient(var(--border-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-line) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+}
+
+.app-shell {
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 50%),
+    var(--bg-page);
+}
+
+.chat-wallpaper {
+  background-color: var(--chat-canvas);
+}
+
+.animate-chat-rise {
+  animation: chat-rise 18s ease-in infinite;
+}
+
+.animate-chat-rise-slow {
+  animation: chat-rise 24s ease-in infinite;
+}
+
+.animate-chat-rise-delay {
+  animation: chat-rise 21s ease-in infinite;
+}
+
+.animate-chat-rise-late {
+  animation: chat-rise 20s ease-in infinite;
+}
+
+.animate-chat-sheen {
+  animation: chat-sheen 9s ease-in-out infinite;
+}
+
+.chat-wave {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 12% 18%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 88% 78%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 50%);
+  background-size: 140% 140%;
+  animation: chat-wave 16s ease-in-out infinite;
+}
+
+.dark .chat-wave {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 12% 18%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 88% 78%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 50%);
+}
+
+.animate-success-ring {
+  animation: success-ring 1.8s ease-out infinite;
+}
+
+.animate-success-glow {
+  animation: success-glow 2.2s ease-in-out infinite;
+}
+
+.animate-success-spark {
+  animation: success-spark 1.6s ease-in-out infinite;
+}
+
