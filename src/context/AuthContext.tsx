@@ -1,11 +1,5 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   clearToken,
   getStoredToken,
@@ -43,51 +37,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     meRequest()
-      .then((nextUser) => {
+      .then(function (nextUser) {
         setUser(nextUser);
       })
-      .catch(() => {
+      .catch(function () {
         clearToken();
         setToken(null);
         setUser(null);
       })
-      .finally(() => {
+      .finally(function () {
         setLoading(false);
       });
   }, [token]);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      user,
-      token,
-      loading,
-      async login(email, password) {
-        const result = await loginRequest(email, password);
-        storeToken(result.token);
-        setToken(result.token);
-        setUser(result.user);
-      },
-      async signup(name, email, password) {
-        const result = await signupRequest(name, email, password);
-        storeToken(result.token);
-        setToken(result.token);
-        setUser(result.user);
-      },
-      async requestPasswordReset(email) {
-        const result = await forgotPasswordRequest(email);
-        return result.email;
-      },
-      async resetPassword(email, password) {
-        await resetPasswordRequest(email, password);
-      },
-      logout() {
-        clearToken();
-        setToken(null);
-        setUser(null);
-      },
-    }),
-    [user, token, loading],
-  );
+  async function login(email: string, password: string) {
+    const result = await loginRequest(email, password);
+    storeToken(result.token);
+    setToken(result.token);
+    setUser(result.user);
+  }
+
+  async function signup(name: string, email: string, password: string) {
+    const result = await signupRequest(name, email, password);
+    storeToken(result.token);
+    setToken(result.token);
+    setUser(result.user);
+  }
+
+  async function requestPasswordReset(email: string) {
+    const result = await forgotPasswordRequest(email);
+    return result.email;
+  }
+
+  async function resetPassword(email: string, password: string) {
+    await resetPasswordRequest(email, password);
+  }
+
+  function logout() {
+    clearToken();
+    setToken(null);
+    setUser(null);
+  }
+
+  const value = {
+    user,
+    token,
+    loading,
+    login,
+    signup,
+    requestPasswordReset,
+    resetPassword,
+    logout,
+  };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

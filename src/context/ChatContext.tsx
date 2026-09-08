@@ -1,13 +1,5 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   chatsRequest,
   createDirectChatRequest,
@@ -17,22 +9,14 @@ import {
   uploadFile,
   usersRequest,
 } from "../api";
-import { connectChatSocket, type ChatSocket } from "../socket";
-import type {
-  Attachment,
-  Chat,
-  ConnectionStatus,
-  Message,
-  ServerEvent,
-  ToastItem,
-  User,
-} from "../types";
+import { connectChatSocket } from "../socket";
+import type { Attachment, Chat, Message, SocketEvent, ToastItem, User } from "../types";
 import { useAuth } from "./AuthContext";
 
 type ChatContextValue = {
   chats: Chat[];
   users: User[];
-  usersById: Record<string, User>;
+  usersById: { [id: string]: User };
   activeChatId: string | null;
   activeChat: Chat | null;
   messages: Message[];
@@ -41,7 +25,7 @@ type ChatContextValue = {
   loadingMessages: boolean;
   loadingMore: boolean;
   chatError: string;
-  connectionStatus: ConnectionStatus;
+  connectionStatus: string;
   typingUserIds: string[];
   toasts: ToastItem[];
   searchResults: Message[];
@@ -65,39 +49,51 @@ type ChatContextValue = {
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);
-const REACTIONS_WAIT_MS = 8000;
+const FAIL_WAIT_MS = 8000;
 
-function upsertMessage(list: Message[], incoming: Message): Message[] {
-  const byClient = incoming.clientId
-    ? list.findIndex((item) => item.clientId === incoming.clientId)
-    : -1;
-  const byId = list.findIndex((item) => item.id === incoming.id);
-  const index = byClient >= 0 ? byClient : byId;
-  if (index === -1) {
-    return [...list, incoming];
+function replaceOrAddMessage(list: Message[], incoming: Message) {
+  const next = [];
+  let replaced = false;
+
+  for (let i = 0; i < list.length; i += 1) {
+    const item = list[i];
+    const sameClient = incoming.clientId && item.clientId === incoming.clientId;
+    const sameId = item.id === incoming.id;
+    if (sameClient || sameId) {
+      next.push(incoming);
+      replaced = true;
+    } else {
+      next.push(item);
+    }
   }
-  const next = [...list];
-  next[index] = incoming;
+
+  if (!replaced) {
+    next.push(incoming);
+  }
+
   return next;
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth();
-  const socketRef = useRef<ChatSocket | null>(null);
+  const socketRef = useRef<ReturnType<typeof connectChatSocket> | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
-  const failTimers = useRef<Record<string, number>>({});
+  const messagesByChatRef = useRef<{ [chatId: string]: Message[] }>({});
+  const userRef = useRef(user);
+  const usersByIdRef = useRef<{ [id: string]: User }>({});
+  const failTimers = useRef<{ [id: string]: number }>({});
 
   const [chats, setChats] = useState<Chat[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
-  const [hasMoreByChat, setHasMoreByChat] = useState<Record<string, boolean>>({});
+  const [messagesByChat, setMessagesByChat] = useState<{ [chatId: string]: Message[] }>({});
+  const [hasMoreByChat, setHasMoreByChat] = useState<{ [chatId: string]: boolean }>({});
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [chatError, setChatError] = useState("");
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("offline");
-  const [typingByChat, setTypingByChat] = useState<Record<string, string[]>>({});
+  const [connectionStatus, setConnectionStatus] = useState("offline");
+  const [typingByChat, setTypingByChat] = useState<{ [chatId: string]: string[] }>({});
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [searchResults, setSearchResults] = useState<Message[]>([]);
   const [searching, setSearching] = useState(false);
@@ -105,159 +101,225 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
 
   activeChatIdRef.current = activeChatId;
+  messagesByChatRef.current = messagesByChat;
+  userRef.current = user;
 
-  const usersById = useMemo(() => {
-    const map: Record<string, User> = {};
-    for (const person of users) {
-      map[person.id] = person;
-    }
-    if (user) {
-      map[user.id] = user;
-    }
-    return map;
-  }, [users, user]);
-  const usersByIdRef = useRef(usersById);
+  const usersById: { [id: string]: User } = {};
+  for (let i = 0; i < users.length; i += 1) {
+    usersById[users[i].id] = users[i];
+  }
+  if (user) {
+    usersById[user.id] = user;
+  }
   usersByIdRef.current = usersById;
 
-  const refreshLists = useCallback(async () => {
-    const [nextChats, nextUsers] = await Promise.all([chatsRequest(), usersRequest()]);
+  async function refreshLists() {
+    const nextChats = await chatsRequest();
+    const nextUsers = await usersRequest();
     setChats(nextChats);
     setUsers(nextUsers);
-  }, []);
+  }
 
-  const markVisibleRead = useCallback((chatId: string, list: Message[]) => {
-    if (!user) {
+  function markVisibleRead(chatId: string, list: Message[]) {
+    const currentUser = userRef.current;
+    if (!currentUser) {
       return;
     }
-    const unreadIds = list
-      .filter((message) => message.senderId !== user.id && !message.readBy.includes(user.id))
-      .map((message) => message.id);
+
+    const unreadIds: string[] = [];
+    for (let i = 0; i < list.length; i += 1) {
+      const message = list[i];
+      if (message.senderId !== currentUser.id && !message.readBy.includes(currentUser.id)) {
+        unreadIds.push(message.id);
+      }
+    }
+
     if (unreadIds.length === 0) {
       return;
     }
-    try {
-      socketRef.current?.send({
+
+    if (socketRef.current) {
+      socketRef.current.send({
         type: "message:read",
         chatId,
         messageIds: unreadIds,
       });
-    } catch {
-      // Socket may be reconnecting.
     }
-  }, [user]);
+  }
 
-  const handleEvent = useCallback(
-    (event: ServerEvent) => {
-      if (event.type === "presence") {
-        setUsers((current) =>
-          current.map((person) =>
-            person.id === event.userId
-              ? { ...person, online: event.online, lastSeen: event.lastSeen }
-              : person,
-          ),
-        );
-        return;
-      }
+  function handleSocketEvent(event: SocketEvent) {
+    const currentUser = userRef.current;
 
-      if (event.type === "typing") {
-        setTypingByChat((current) => {
-          const existing = current[event.chatId] ?? [];
-          const nextIds = event.isTyping
-            ? Array.from(new Set([...existing, event.userId]))
-            : existing.filter((id) => id !== event.userId);
-          return { ...current, [event.chatId]: nextIds };
-        });
-        return;
-      }
-
-      if (event.type === "unread") {
-        setChats((current) =>
-          current.map((chat) =>
-            chat.id === event.chatId ? { ...chat, unreadCount: event.count } : chat,
-          ),
-        );
-        return;
-      }
-
-      if (event.type === "message:new" || event.type === "message:updated") {
-        const incoming = event.message;
-        if (failTimers.current[incoming.clientId ?? incoming.id]) {
-          window.clearTimeout(failTimers.current[incoming.clientId ?? incoming.id]);
-          delete failTimers.current[incoming.clientId ?? incoming.id];
-        }
-
-        setMessagesByChat((current) => ({
-          ...current,
-          [incoming.chatId]: upsertMessage(current[incoming.chatId] ?? [], incoming),
-        }));
-
-        setChats((current) => {
-          const exists = current.some((chat) => chat.id === incoming.chatId);
-          if (!exists) {
-            void refreshLists();
-            return current;
-          }
-          return current
-            .map((chat) => {
-              if (chat.id !== incoming.chatId) {
-                return chat;
-              }
-              const isIncoming =
-                user && incoming.senderId !== user.id && event.type === "message:new";
-              const isViewing = activeChatIdRef.current === incoming.chatId;
-              return {
-                ...chat,
-                lastMessage: incoming,
-                unreadCount: isIncoming && !isViewing ? chat.unreadCount + 1 : chat.unreadCount,
-              };
-            })
-            .sort((a, b) => {
-              const timeA = a.lastMessage?.createdAt ?? a.createdAt;
-              const timeB = b.lastMessage?.createdAt ?? b.createdAt;
-              return timeB.localeCompare(timeA);
+    if (event.type === "presence" && event.userId) {
+      setUsers(function (current) {
+        const next = [];
+        for (let i = 0; i < current.length; i += 1) {
+          const person = current[i];
+          if (person.id === event.userId) {
+            next.push({
+              ...person,
+              online: Boolean(event.online),
+              lastSeen: event.lastSeen || person.lastSeen,
             });
-        });
-
-        if (event.type === "message:new" && user && incoming.senderId !== user.id) {
-          const viewing = activeChatIdRef.current === incoming.chatId && !document.hidden;
-          if (viewing) {
-            markVisibleRead(incoming.chatId, [incoming]);
           } else {
-            const senderName = usersByIdRef.current[incoming.senderId]?.name ?? "New message";
-            const toast: ToastItem = {
-              id: incoming.id,
-              title: senderName,
-              body: incoming.text || "Sent an attachment",
-              chatId: incoming.chatId,
-            };
-            setToasts((current) => [toast, ...current].slice(0, 4));
-            if (Notification.permission === "granted") {
-              new Notification(`PingMe · ${senderName}`, {
-                body: incoming.text || "Sent an attachment",
-              });
+            next.push(person);
+          }
+        }
+        return next;
+      });
+      return;
+    }
+
+    if (event.type === "typing" && event.chatId && event.userId) {
+      setTypingByChat(function (current) {
+        const existing = current[event.chatId as string] || [];
+        let nextIds: string[] = [];
+        if (event.isTyping) {
+          nextIds = existing.slice();
+          if (!nextIds.includes(event.userId as string)) {
+            nextIds.push(event.userId as string);
+          }
+        } else {
+          for (let i = 0; i < existing.length; i += 1) {
+            if (existing[i] !== event.userId) {
+              nextIds.push(existing[i]);
             }
           }
         }
-        return;
+        return { ...current, [event.chatId as string]: nextIds };
+      });
+      return;
+    }
+
+    if (event.type === "unread" && event.chatId) {
+      setChats(function (current) {
+        const next = [];
+        for (let i = 0; i < current.length; i += 1) {
+          const chat = current[i];
+          if (chat.id === event.chatId) {
+            next.push({ ...chat, unreadCount: event.count || 0 });
+          } else {
+            next.push(chat);
+          }
+        }
+        return next;
+      });
+      return;
+    }
+
+    if ((event.type === "message:new" || event.type === "message:updated") && event.message && typeof event.message !== "string") {
+      const incoming = event.message;
+      const timerKey = incoming.clientId || incoming.id;
+      if (failTimers.current[timerKey]) {
+        window.clearTimeout(failTimers.current[timerKey]);
+        delete failTimers.current[timerKey];
       }
 
-      if (event.type === "message:deleted") {
-        setMessagesByChat((current) => ({
+      setMessagesByChat(function (current) {
+        const list = current[incoming.chatId] || [];
+        return {
           ...current,
-          [event.chatId]: (current[event.chatId] ?? []).filter(
-            (item) => item.id !== event.messageId,
-          ),
-        }));
-        void refreshLists();
-        return;
-      }
+          [incoming.chatId]: replaceOrAddMessage(list, incoming),
+        };
+      });
 
-      if (event.type === "error") {
-        setChatError(event.message);
+      setChats(function (current) {
+        let exists = false;
+        for (let i = 0; i < current.length; i += 1) {
+          if (current[i].id === incoming.chatId) {
+            exists = true;
+          }
+        }
+        if (!exists) {
+          void refreshLists();
+          return current;
+        }
+
+        const next = [];
+        for (let i = 0; i < current.length; i += 1) {
+          const chat = current[i];
+          if (chat.id !== incoming.chatId) {
+            next.push(chat);
+          } else {
+            const isIncoming =
+              currentUser && incoming.senderId !== currentUser.id && event.type === "message:new";
+            const isViewing = activeChatIdRef.current === incoming.chatId;
+            let unreadCount = chat.unreadCount;
+            if (isIncoming && !isViewing) {
+              unreadCount = chat.unreadCount + 1;
+            }
+            next.push({
+              ...chat,
+              lastMessage: incoming,
+              unreadCount,
+            });
+          }
+        }
+
+        next.sort(function (a, b) {
+          const timeA = a.lastMessage ? a.lastMessage.createdAt : a.createdAt;
+          const timeB = b.lastMessage ? b.lastMessage.createdAt : b.createdAt;
+          if (timeA > timeB) {
+            return -1;
+          }
+          if (timeA < timeB) {
+            return 1;
+          }
+          return 0;
+        });
+        return next;
+      });
+
+      if (event.type === "message:new" && currentUser && incoming.senderId !== currentUser.id) {
+        const viewing = activeChatIdRef.current === incoming.chatId && !document.hidden;
+        if (viewing) {
+          markVisibleRead(incoming.chatId, [incoming]);
+        } else {
+          const sender = usersByIdRef.current[incoming.senderId];
+          const senderName = sender ? sender.name : "New message";
+          const toast = {
+            id: incoming.id,
+            title: senderName,
+            body: incoming.text || "Sent an attachment",
+            chatId: incoming.chatId,
+          };
+          setToasts(function (current) {
+            return [toast, ...current].slice(0, 4);
+          });
+          if (Notification.permission === "granted") {
+            new Notification("PingMe · " + senderName, {
+              body: incoming.text || "Sent an attachment",
+            });
+          }
+        }
       }
-    },
-    [markVisibleRead, refreshLists, user],
-  );
+      return;
+    }
+
+    if (event.type === "message:deleted" && event.chatId && event.messageId) {
+      const chatId = event.chatId;
+      const messageId = event.messageId;
+      setMessagesByChat(function (current) {
+        const list = current[chatId] || [];
+        const nextList = [];
+        for (let i = 0; i < list.length; i += 1) {
+          if (list[i].id !== messageId) {
+            nextList.push(list[i]);
+          }
+        }
+        return { ...current, [chatId]: nextList };
+      });
+      void refreshLists();
+      return;
+    }
+
+    if (event.type === "error" && typeof event.message === "string") {
+      setChatError(event.message);
+    }
+  }
+
+  const handleSocketEventRef = useRef(handleSocketEvent);
+  handleSocketEventRef.current = handleSocketEvent;
 
   useEffect(() => {
     if (!token || !user) {
@@ -266,17 +328,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     setLoadingChats(true);
     refreshLists()
-      .catch((error: Error) => {
+      .catch(function (error: Error) {
         setChatError(error.message);
       })
-      .finally(() => {
+      .finally(function () {
         setLoadingChats(false);
       });
 
     const socket = connectChatSocket({
       token,
-      onEvent: handleEvent,
-      onStatus: (status) => {
+      onEvent: function (event) {
+        handleSocketEventRef.current(event);
+      },
+      onStatus: function (status) {
         setConnectionStatus(status);
         if (status === "connected") {
           void refreshLists();
@@ -289,45 +353,49 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       void Notification.requestPermission();
     }
 
-    return () => {
+    return function () {
       socket.close();
       socketRef.current = null;
     };
-  }, [token, user, refreshLists, handleEvent]);
+  }, [token, user]);
 
-  const selectChat = useCallback(
-    async (chatId: string | null) => {
-      setActiveChatId(chatId);
-      setReplyTo(null);
-      setSearchResults([]);
-      setChatError("");
-      if (!chatId) {
-        return;
-      }
-      if (messagesByChat[chatId]) {
-        markVisibleRead(chatId, messagesByChat[chatId]);
-        return;
-      }
-      setLoadingMessages(true);
-      try {
-        const result = await messagesRequest(chatId);
-        setMessagesByChat((current) => ({ ...current, [chatId]: result.messages }));
-        setHasMoreByChat((current) => ({ ...current, [chatId]: result.hasMore }));
-        markVisibleRead(chatId, result.messages);
-      } catch (error) {
-        setChatError(error instanceof Error ? error.message : "Could not load messages.");
-      } finally {
-        setLoadingMessages(false);
-      }
-    },
-    [markVisibleRead, messagesByChat],
-  );
+  async function selectChat(chatId: string | null) {
+    setActiveChatId(chatId);
+    setReplyTo(null);
+    setSearchResults([]);
+    setChatError("");
+    if (!chatId) {
+      return;
+    }
 
-  const loadMore = useCallback(async () => {
+    const cached = messagesByChatRef.current[chatId];
+    if (cached) {
+      markVisibleRead(chatId, cached);
+      return;
+    }
+
+    setLoadingMessages(true);
+    try {
+      const result = await messagesRequest(chatId);
+      setMessagesByChat(function (current) {
+        return { ...current, [chatId]: result.messages };
+      });
+      setHasMoreByChat(function (current) {
+        return { ...current, [chatId]: result.hasMore };
+      });
+      markVisibleRead(chatId, result.messages);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "Could not load messages.");
+    } finally {
+      setLoadingMessages(false);
+    }
+  }
+
+  async function loadMore() {
     if (!activeChatId || loadingMore || !hasMoreByChat[activeChatId]) {
       return;
     }
-    const current = messagesByChat[activeChatId] ?? [];
+    const current = messagesByChat[activeChatId] || [];
     const oldest = current[0];
     if (!oldest) {
       return;
@@ -335,60 +403,79 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setLoadingMore(true);
     try {
       const result = await messagesRequest(activeChatId, oldest.id);
-      setMessagesByChat((existing) => ({
-        ...existing,
-        [activeChatId]: [...result.messages, ...(existing[activeChatId] ?? [])],
-      }));
-      setHasMoreByChat((existing) => ({ ...existing, [activeChatId]: result.hasMore }));
+      setMessagesByChat(function (existing) {
+        const older = result.messages;
+        const latest = existing[activeChatId] || [];
+        return { ...existing, [activeChatId]: older.concat(latest) };
+      });
+      setHasMoreByChat(function (existing) {
+        return { ...existing, [activeChatId]: result.hasMore };
+      });
     } finally {
       setLoadingMore(false);
     }
-  }, [activeChatId, hasMoreByChat, loadingMore, messagesByChat]);
+  }
 
-  const queueFailTimer = useCallback((clientId: string, chatId: string) => {
-    failTimers.current[clientId] = window.setTimeout(() => {
-      setMessagesByChat((current) => ({
-        ...current,
-        [chatId]: (current[chatId] ?? []).map((message) =>
-          message.clientId === clientId ? { ...message, status: "failed" } : message,
-        ),
-      }));
-    }, REACTIONS_WAIT_MS);
-  }, []);
+  function queueFailTimer(clientId: string, chatId: string) {
+    failTimers.current[clientId] = window.setTimeout(function () {
+      setMessagesByChat(function (current) {
+        const list = current[chatId] || [];
+        const nextList = [];
+        for (let i = 0; i < list.length; i += 1) {
+          const message = list[i];
+          if (message.clientId === clientId) {
+            nextList.push({ ...message, status: "failed" });
+          } else {
+            nextList.push(message);
+          }
+        }
+        return { ...current, [chatId]: nextList };
+      });
+    }, FAIL_WAIT_MS);
+  }
 
-  const sendOptimistic = useCallback(
-    async (text: string, attachments: Attachment[], retryOf?: Message) => {
-      if (!user || !activeChatId) {
-        return;
+  async function sendOptimistic(text: string, attachments: Attachment[], retryOf?: Message) {
+    if (!user || !activeChatId) {
+      return;
+    }
+
+    const clientId = retryOf && retryOf.clientId ? retryOf.clientId : "temp-" + crypto.randomUUID();
+    const optimistic: Message = {
+      id: retryOf ? retryOf.id : clientId,
+      chatId: activeChatId,
+      senderId: user.id,
+      text,
+      createdAt: retryOf ? retryOf.createdAt : new Date().toISOString(),
+      replyToId: retryOf ? retryOf.replyToId : replyTo ? replyTo.id : undefined,
+      clientId,
+      attachments,
+      reactions: [],
+      status: "sending",
+      deliveredTo: [],
+      readBy: [],
+    };
+
+    setMessagesByChat(function (current) {
+      const list = current[activeChatId] || [];
+      if (retryOf) {
+        const nextList = [];
+        for (let i = 0; i < list.length; i += 1) {
+          if (list[i].clientId === clientId) {
+            nextList.push(optimistic);
+          } else {
+            nextList.push(list[i]);
+          }
+        }
+        return { ...current, [activeChatId]: nextList };
       }
-      const clientId = retryOf?.clientId ?? `temp-${crypto.randomUUID()}`;
-      const optimistic: Message = {
-        id: retryOf?.id ?? clientId,
-        chatId: activeChatId,
-        senderId: user.id,
-        text,
-        createdAt: retryOf?.createdAt ?? new Date().toISOString(),
-        replyToId: retryOf?.replyToId ?? replyTo?.id,
-        clientId,
-        attachments,
-        reactions: [],
-        status: "sending",
-        deliveredTo: [],
-        readBy: [],
-      };
+      return { ...current, [activeChatId]: list.concat([optimistic]) };
+    });
+    setReplyTo(null);
+    queueFailTimer(clientId, activeChatId);
 
-      setMessagesByChat((current) => ({
-        ...current,
-        [activeChatId]: retryOf
-          ? (current[activeChatId] ?? []).map((message) =>
-              message.clientId === clientId ? optimistic : message,
-            )
-          : [...(current[activeChatId] ?? []), optimistic],
-      }));
-      setReplyTo(null);
-      queueFailTimer(clientId, activeChatId);
-
-      const sent = socketRef.current?.send({
+    let sent = false;
+    if (socketRef.current) {
+      sent = socketRef.current.send({
         type: "message:send",
         chatId: activeChatId,
         text,
@@ -396,148 +483,144 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         clientId,
         attachments,
       });
-      if (!sent) {
-        setMessagesByChat((current) => ({
-          ...current,
-          [activeChatId]: (current[activeChatId] ?? []).map((message) =>
-            message.clientId === clientId ? { ...message, status: "failed" } : message,
-          ),
-        }));
+    }
+
+    if (!sent) {
+      setMessagesByChat(function (current) {
+        const list = current[activeChatId] || [];
+        const nextList = [];
+        for (let i = 0; i < list.length; i += 1) {
+          const message = list[i];
+          if (message.clientId === clientId) {
+            nextList.push({ ...message, status: "failed" });
+          } else {
+            nextList.push(message);
+          }
+        }
+        return { ...current, [activeChatId]: nextList };
+      });
+    }
+  }
+
+  async function sendMessage(text: string, files: File[] = []) {
+    if (!token || !activeChatId) {
+      return;
+    }
+    if (!text.trim() && files.length === 0) {
+      return;
+    }
+
+    const attachments: Attachment[] = [];
+    try {
+      for (let i = 0; i < files.length; i += 1) {
+        setUploadProgress(0);
+        const uploaded = await uploadFile(files[i], token, function (percent) {
+          setUploadProgress(percent);
+        });
+        attachments.push(uploaded);
+      }
+      setUploadProgress(null);
+      await sendOptimistic(text.trim(), attachments);
+    } catch (error) {
+      setUploadProgress(null);
+      setChatError(error instanceof Error ? error.message : "Could not send.");
+    }
+  }
+
+  async function retryMessage(message: Message) {
+    await sendOptimistic(message.text, message.attachments, message);
+  }
+
+  let activeChat: Chat | null = null;
+  for (let i = 0; i < chats.length; i += 1) {
+    if (chats[i].id === activeChatId) {
+      activeChat = chats[i];
+    }
+  }
+
+  const value: ChatContextValue = {
+    chats,
+    users,
+    usersById,
+    activeChatId,
+    activeChat,
+    messages: activeChatId && messagesByChat[activeChatId] ? messagesByChat[activeChatId] : [],
+    hasMore: activeChatId ? Boolean(hasMoreByChat[activeChatId]) : false,
+    loadingChats,
+    loadingMessages,
+    loadingMore,
+    chatError,
+    connectionStatus,
+    typingUserIds: activeChatId && typingByChat[activeChatId] ? typingByChat[activeChatId] : [],
+    toasts,
+    searchResults,
+    searching,
+    uploadProgress,
+    replyTo,
+    setReplyTo,
+    selectChat,
+    loadMore,
+    sendMessage,
+    retryMessage,
+    editMessage(messageId, text) {
+      if (socketRef.current) {
+        socketRef.current.send({ type: "message:edit", messageId, text });
       }
     },
-    [activeChatId, queueFailTimer, replyTo, user],
-  );
-
-  const sendMessage = useCallback(
-    async (text: string, files: File[] = []) => {
-      if (!token || !activeChatId) {
+    deleteMessage(messageId) {
+      if (socketRef.current) {
+        socketRef.current.send({ type: "message:delete", messageId });
+      }
+    },
+    reactToMessage(messageId, emoji) {
+      if (socketRef.current) {
+        socketRef.current.send({ type: "message:react", messageId, emoji });
+      }
+    },
+    startTyping() {
+      if (activeChatId && socketRef.current) {
+        socketRef.current.send({ type: "typing:start", chatId: activeChatId });
+      }
+    },
+    stopTyping() {
+      if (activeChatId && socketRef.current) {
+        socketRef.current.send({ type: "typing:stop", chatId: activeChatId });
+      }
+    },
+    async searchInChat(query) {
+      if (!activeChatId) {
         return;
       }
-      if (!text.trim() && files.length === 0) {
-        return;
-      }
-
-      const attachments: Attachment[] = [];
+      setSearching(true);
       try {
-        for (const file of files) {
-          setUploadProgress(0);
-          const uploaded = await uploadFile(file, token, (percent) => {
-            setUploadProgress(percent);
-          });
-          attachments.push(uploaded);
-        }
-        setUploadProgress(null);
-        await sendOptimistic(text.trim(), attachments);
-      } catch (error) {
-        setUploadProgress(null);
-        setChatError(error instanceof Error ? error.message : "Could not send.");
+        const results = await searchMessagesRequest(activeChatId, query);
+        setSearchResults(results);
+      } finally {
+        setSearching(false);
       }
     },
-    [activeChatId, sendOptimistic, token],
-  );
-
-  const retryMessage = useCallback(
-    async (message: Message) => {
-      await sendOptimistic(message.text, message.attachments, message);
+    async startDirectChat(userId) {
+      const chat = await createDirectChatRequest(userId);
+      await refreshLists();
+      await selectChat(chat.id);
     },
-    [sendOptimistic],
-  );
-
-  const value = useMemo<ChatContextValue>(
-    () => ({
-      chats,
-      users,
-      usersById,
-      activeChatId,
-      activeChat: chats.find((chat) => chat.id === activeChatId) ?? null,
-      messages: activeChatId ? messagesByChat[activeChatId] ?? [] : [],
-      hasMore: activeChatId ? Boolean(hasMoreByChat[activeChatId]) : false,
-      loadingChats,
-      loadingMessages,
-      loadingMore,
-      chatError,
-      connectionStatus,
-      typingUserIds: activeChatId ? typingByChat[activeChatId] ?? [] : [],
-      toasts,
-      searchResults,
-      searching,
-      uploadProgress,
-      replyTo,
-      setReplyTo,
-      selectChat,
-      loadMore,
-      sendMessage,
-      retryMessage,
-      editMessage(messageId, text) {
-        socketRef.current?.send({ type: "message:edit", messageId, text });
-      },
-      deleteMessage(messageId) {
-        socketRef.current?.send({ type: "message:delete", messageId });
-      },
-      reactToMessage(messageId, emoji) {
-        socketRef.current?.send({ type: "message:react", messageId, emoji });
-      },
-      startTyping() {
-        if (activeChatId) {
-          socketRef.current?.send({ type: "typing:start", chatId: activeChatId });
+    async startGroupChat(name, memberIds) {
+      const chat = await createGroupChatRequest(name, memberIds);
+      await refreshLists();
+      await selectChat(chat.id);
+    },
+    dismissToast(id) {
+      setToasts(function (current) {
+        const next = [];
+        for (let i = 0; i < current.length; i += 1) {
+          if (current[i].id !== id) {
+            next.push(current[i]);
+          }
         }
-      },
-      stopTyping() {
-        if (activeChatId) {
-          socketRef.current?.send({ type: "typing:stop", chatId: activeChatId });
-        }
-      },
-      async searchInChat(query) {
-        if (!activeChatId) {
-          return;
-        }
-        setSearching(true);
-        try {
-          const results = await searchMessagesRequest(activeChatId, query);
-          setSearchResults(results);
-        } finally {
-          setSearching(false);
-        }
-      },
-      async startDirectChat(userId) {
-        const chat = await createDirectChatRequest(userId);
-        await refreshLists();
-        await selectChat(chat.id);
-      },
-      async startGroupChat(name, memberIds) {
-        const chat = await createGroupChatRequest(name, memberIds);
-        await refreshLists();
-        await selectChat(chat.id);
-      },
-      dismissToast(id) {
-        setToasts((current) => current.filter((toast) => toast.id !== id));
-      },
-    }),
-    [
-      activeChatId,
-      chatError,
-      chats,
-      connectionStatus,
-      hasMoreByChat,
-      loadMore,
-      loadingChats,
-      loadingMessages,
-      loadingMore,
-      messagesByChat,
-      refreshLists,
-      replyTo,
-      retryMessage,
-      searchResults,
-      searching,
-      selectChat,
-      sendMessage,
-      toasts,
-      typingByChat,
-      uploadProgress,
-      users,
-      usersById,
-    ],
-  );
+        return next;
+      });
+    },
+  };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

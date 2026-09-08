@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Search, X } from "lucide-react";
 import { useChat } from "../../context/ChatContext";
 import { formatLastSeen } from "../../lib/format";
@@ -13,17 +13,19 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) {
-      return users;
+  const needle = query.trim().toLowerCase();
+  let filtered = users;
+  if (needle) {
+    filtered = [];
+    for (let i = 0; i < users.length; i += 1) {
+      const person = users[i];
+      const nameMatch = person.name.toLowerCase().includes(needle);
+      const emailMatch = person.email.toLowerCase().includes(needle);
+      if (nameMatch || emailMatch) {
+        filtered.push(person);
+      }
     }
-    return users.filter(
-      (person) =>
-        person.name.toLowerCase().includes(needle) ||
-        person.email.toLowerCase().includes(needle),
-    );
-  }, [query, users]);
+  }
 
   async function openDirect(userId: string) {
     setSaving(true);

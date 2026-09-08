@@ -1,7 +1,3 @@
-export type ChatType = "direct" | "group";
-export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed";
-export type AttachmentKind = "image" | "document";
-
 export type UserRecord = {
   id: string;
   name: string;
@@ -24,7 +20,7 @@ export type Attachment = {
   id: string;
   name: string;
   url: string;
-  kind: AttachmentKind;
+  kind: string;
   size: number;
 };
 
@@ -45,34 +41,29 @@ export type MessageRecord = {
   clientId?: string;
   attachments: Attachment[];
   reactions: Reaction[];
-  status: MessageStatus;
+  status: string;
   deliveredTo: string[];
   readBy: string[];
 };
 
 export type ChatRecord = {
   id: string;
-  type: ChatType;
+  type: string;
   name: string;
   memberIds: string[];
   adminIds: string[];
   createdAt: string;
 };
 
-export type ClientEvent =
-  | { type: "auth"; token: string }
-  | {
-      type: "message:send";
-      chatId: string;
-      text: string;
-      replyToId?: string;
-      clientId: string;
-      attachments?: Attachment[];
-    }
-  | { type: "message:edit"; messageId: string; text: string }
-  | { type: "message:delete"; messageId: string }
-  | { type: "message:react"; messageId: string; emoji: string }
-  | { type: "message:read"; chatId: string; messageIds: string[] }
-  | { type: "typing:start"; chatId: string }
-  | { type: "typing:stop"; chatId: string }
-  | { type: "ping" };
+export type SocketEvent = {
+  type: string;
+  token?: string;
+  chatId?: string;
+  text?: string;
+  replyToId?: string;
+  clientId?: string;
+  attachments?: Attachment[];
+  messageId?: string;
+  messageIds?: string[];
+  emoji?: string;
+};

@@ -1,8 +1,6 @@
 import type { CSSProperties, SVGProps } from "react";
 
-export const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "🎉"] as const;
-
-export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
+export const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "🎉"];
 
 type IconProps = SVGProps<SVGSVGElement> & { cutout?: string };
 
@@ -56,14 +54,6 @@ function PartyIcon({ cutout: _cutout, ...props }: IconProps) {
   );
 }
 
-const ICONS: Record<string, (props: IconProps) => JSX.Element> = {
-  "👍": ThumbIcon,
-  "❤️": HeartIcon,
-  "😂": LaughIcon,
-  "😮": WowIcon,
-  "🎉": PartyIcon,
-};
-
 export function ThemeEmoji({
   emoji,
   className = "",
@@ -77,16 +67,28 @@ export function ThemeEmoji({
   size?: number;
   onSent?: boolean;
 }) {
-  const Icon = ICONS[emoji];
   const cutout = onSent ? "var(--bubble-sent)" : "var(--bubble-received)";
-  if (!Icon) {
-    return (
-      <span className={className} style={style}>
-        {emoji}
-      </span>
-    );
+  const iconProps = { width: size, height: size, className, style, cutout };
+
+  if (emoji === "👍") {
+    return <ThumbIcon {...iconProps} />;
   }
+  if (emoji === "❤️") {
+    return <HeartIcon {...iconProps} />;
+  }
+  if (emoji === "😂") {
+    return <LaughIcon {...iconProps} />;
+  }
+  if (emoji === "😮") {
+    return <WowIcon {...iconProps} />;
+  }
+  if (emoji === "🎉") {
+    return <PartyIcon {...iconProps} />;
+  }
+
   return (
-    <Icon width={size} height={size} className={className} style={style} cutout={cutout} />
+    <span className={className} style={style}>
+      {emoji}
+    </span>
   );
 }

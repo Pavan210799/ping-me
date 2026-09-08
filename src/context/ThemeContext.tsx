@@ -1,37 +1,36 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-
-type Theme = "light" | "dark";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 type ThemeContextValue = {
-  theme: Theme;
+  theme: string;
   toggleTheme: () => void;
 };
 
 const THEME_KEY = "pingme-theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function getStoredTheme(): Theme {
+function getStoredTheme() {
   try {
-    return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+    if (localStorage.getItem(THEME_KEY) === "dark") {
+      return "dark";
+    }
+    return "light";
   } catch {
     return "light";
   }
 }
 
-function applyTheme(theme: Theme): void {
-  document.documentElement.classList.toggle("dark", theme === "dark");
+function applyTheme(theme: string) {
+  if (theme === "dark") {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
   document.documentElement.style.colorScheme = theme;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [theme, setTheme] = useState(function () {
     const stored = getStoredTheme();
     applyTheme(stored);
     return stored;
@@ -42,19 +41,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch {
-      // Ignore private-mode storage errors.
+      return;
     }
   }, [theme]);
 
-  const value = useMemo(
-    () => ({
-      theme,
-      toggleTheme() {
-        setTheme((current) => (current === "light" ? "dark" : "light"));
-      },
-    }),
-    [theme],
-  );
+  function toggleTheme() {
+    if (theme === "light") {
+      setTheme("dark");
+    } else {
+      setTheme("light");
+    }
+  }
+
+  const value = {
+    theme,
+    toggleTheme,
+  };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

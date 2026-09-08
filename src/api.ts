@@ -18,99 +18,198 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-async function readError(response: Response): Promise<string> {
+function authHeaders() {
+  const token = getStoredToken();
+  const headers: { [key: string]: string } = {};
+  if (token) {
+    headers.Authorization = "Bearer " + token;
+  }
+  return headers;
+}
+
+async function getErrorMessage(response: Response, fallback: string) {
   try {
     const data = (await response.json()) as { message?: string };
-    return data.message ?? "Something went wrong.";
+    return data.message || fallback;
   } catch {
-    return "Something went wrong.";
+    return fallback;
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getStoredToken();
-  const headers = new Headers(options.headers);
-  headers.set("Content-Type", "application/json");
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(path, { ...options, headers });
-  if (!response.ok) {
-    throw new Error(await readError(response));
-  }
-  return response.json() as Promise<T>;
-}
-
-export function loginRequest(email: string, password: string) {
-  return request<{ token: string; user: User }>("/api/auth/login", {
+export async function loginRequest(email: string, password: string) {
+  const response = await fetch("/api/auth/login", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ email, password }),
   });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to log in."));
+  }
+
+  return response.json() as Promise<{ token: string; user: User }>;
 }
 
-export function signupRequest(name: string, email: string, password: string) {
-  return request<{ token: string; user: User }>("/api/auth/signup", {
+export async function signupRequest(name: string, email: string, password: string) {
+  const response = await fetch("/api/auth/signup", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ name, email, password }),
   });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to create account."));
+  }
+
+  return response.json() as Promise<{ token: string; user: User }>;
 }
 
-export function forgotPasswordRequest(email: string) {
-  return request<{ email: string }>("/api/auth/forgot", {
+export async function forgotPasswordRequest(email: string) {
+  const response = await fetch("/api/auth/forgot", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ email }),
   });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to find that account."));
+  }
+
+  return response.json() as Promise<{ email: string }>;
 }
 
-export function resetPasswordRequest(email: string, password: string) {
-  return request<{ email: string }>("/api/auth/reset", {
+export async function resetPasswordRequest(email: string, password: string) {
+  const response = await fetch("/api/auth/reset", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ email, password }),
   });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to reset password."));
+  }
+
+  return response.json() as Promise<{ email: string }>;
 }
 
-export function meRequest() {
-  return request<User>("/api/auth/me");
+export async function meRequest() {
+  const response = await fetch("/api/auth/me", {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to load profile."));
+  }
+
+  return response.json() as Promise<User>;
 }
 
-export function usersRequest() {
-  return request<User[]>("/api/users");
+export async function usersRequest() {
+  const response = await fetch("/api/users", {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to load people."));
+  }
+
+  return response.json() as Promise<User[]>;
 }
 
-export function chatsRequest() {
-  return request<Chat[]>("/api/chats");
+export async function chatsRequest() {
+  const response = await fetch("/api/chats", {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to load chats."));
+  }
+
+  return response.json() as Promise<Chat[]>;
 }
 
-export function createDirectChatRequest(userId: string) {
-  return request<Chat>("/api/chats/direct", {
+export async function createDirectChatRequest(userId: string) {
+  const response = await fetch("/api/chats/direct", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
     body: JSON.stringify({ userId }),
   });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to start chat."));
+  }
+
+  return response.json() as Promise<Chat>;
 }
 
-export function createGroupChatRequest(name: string, memberIds: string[]) {
-  return request<Chat>("/api/chats/group", {
+export async function createGroupChatRequest(name: string, memberIds: string[]) {
+  const response = await fetch("/api/chats/group", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
     body: JSON.stringify({ name, memberIds }),
   });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to create group."));
+  }
+
+  return response.json() as Promise<Chat>;
 }
 
 const MESSAGE_PAGE_SIZE = 8;
 
-export function messagesRequest(chatId: string, before?: string) {
-  const query = before
-    ? `?limit=${MESSAGE_PAGE_SIZE}&before=${before}`
-    : `?limit=${MESSAGE_PAGE_SIZE}`;
-  return request<{ messages: Message[]; hasMore: boolean }>(
-    `/api/chats/${chatId}/messages${query}`,
-  );
+export async function messagesRequest(chatId: string, before?: string) {
+  let url = `/api/chats/${chatId}/messages?limit=${MESSAGE_PAGE_SIZE}`;
+  if (before) {
+    url = `${url}&before=${before}`;
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to load messages."));
+  }
+
+  return response.json() as Promise<{ messages: Message[]; hasMore: boolean }>;
 }
 
-export function searchMessagesRequest(chatId: string, query: string) {
-  return request<Message[]>(
-    `/api/chats/${chatId}/messages/search?q=${encodeURIComponent(query)}`,
-  );
+export async function searchMessagesRequest(chatId: string, query: string) {
+  const url = `/api/chats/${chatId}/messages/search?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to search messages."));
+  }
+
+  return response.json() as Promise<Message[]>;
 }
 
 export function uploadFile(
@@ -134,11 +233,11 @@ export function uploadFile(
         resolve(JSON.parse(xhr.responseText) as Attachment);
         return;
       }
-      reject(new Error("Upload failed. Try again."));
+      reject(new Error("Failed to upload file."));
     };
 
     xhr.onerror = () => {
-      reject(new Error("Upload failed. Try again."));
+      reject(new Error("Failed to upload file."));
     };
 
     const form = new FormData();

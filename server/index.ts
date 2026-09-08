@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
 import bcrypt from "bcryptjs";
-import type { ClientEvent, MessageRecord } from "./types.ts";
+import type { MessageRecord, SocketEvent } from "./types.ts";
 import {
   addMessage,
   createDirectChat,
@@ -313,9 +313,9 @@ app.get("*", (req, res, next) => {
 });
 
 function handleIncomingEvent(client: SocketClient, raw: string): void {
-  let event: ClientEvent;
+  let event: SocketEvent;
   try {
-    event = JSON.parse(raw) as ClientEvent;
+    event = JSON.parse(raw) as SocketEvent;
   } catch {
     sendToSocket(client.socket, { type: "error", message: "Invalid message." });
     return;
@@ -327,7 +327,7 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
   }
 
   if (event.type === "auth") {
-    const userId = readUserIdFromToken(event.token);
+    const userId = readUserIdFromToken(event.token || "");
     const user = userId ? findUserById(userId) : undefined;
     if (!user) {
       sendToSocket(client.socket, { type: "auth:error", message: "Invalid token." });
@@ -371,7 +371,7 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
   const userId = client.userId;
 
   if (event.type === "message:send") {
-    const chat = findChatById(event.chatId);
+    const chat = findChatById(event.chatId || "");
     if (!chat || !chat.memberIds.includes(userId)) {
       sendToSocket(client.socket, { type: "error", message: "You cannot send to this chat." });
       return;
@@ -415,19 +415,19 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
   }
 
   if (event.type === "message:edit") {
-    const message = findMessageById(event.messageId);
+    const message = findMessageById(event.messageId || "");
     if (!message || message.senderId !== userId) {
       sendToSocket(client.socket, { type: "error", message: "You can only edit your messages." });
       return;
     }
-    message.text = event.text.trim();
+    message.text = String(event.text || "").trim();
     message.updatedAt = new Date().toISOString();
     sendToChat(message.chatId, { type: "message:updated", message });
     return;
   }
 
   if (event.type === "message:delete") {
-    const message = findMessageById(event.messageId);
+    const message = findMessageById(event.messageId || "");
     if (!message || message.senderId !== userId) {
       sendToSocket(client.socket, { type: "error", message: "You can only delete your messages." });
       return;
@@ -439,7 +439,7 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
   }
 
   if (event.type === "message:react") {
-    const message = findMessageById(event.messageId);
+    const message = findMessageById(event.messageId || "");
     if (!message) {
       return;
     }
@@ -453,12 +453,12 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
   }
 
   if (event.type === "message:read") {
-    const chat = findChatById(event.chatId);
+    const chat = findChatById(event.chatId || "");
     if (!chat || !chat.memberIds.includes(userId)) {
       return;
     }
-    markChatRead(userId, chat.id, event.messageIds);
-    for (const messageId of event.messageIds) {
+    markChatRead(userId, chat.id, event.messageIds || []);
+    for (const messageId of event.messageIds || []) {
       const message = findMessageById(messageId);
       if (message) {
         sendToChat(chat.id, { type: "message:updated", message });
@@ -470,7 +470,7 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
 
   if (event.type === "typing:start" || event.type === "typing:stop") {
     sendToChat(
-      event.chatId,
+      event.chatId || "",
       {
         type: "typing",
         chatId: event.chatId,

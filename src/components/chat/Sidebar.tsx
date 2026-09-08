@@ -1,5 +1,5 @@
 import { LogOut, Plus, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useChat } from "../../context/ChatContext";
 import { chatTitle, formatTime } from "../../lib/format";
@@ -15,17 +15,19 @@ export function Sidebar() {
   const [query, setQuery] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle || !user) {
-      return chats;
-    }
-    return chats.filter((chat) => {
+  const needle = query.trim().toLowerCase();
+  let filtered = chats;
+  if (needle && user) {
+    filtered = [];
+    for (let i = 0; i < chats.length; i += 1) {
+      const chat = chats[i];
       const title = chatTitle(chat.name, chat.memberIds, user.id, usersById).toLowerCase();
-      const preview = chat.lastMessage?.text.toLowerCase() ?? "";
-      return title.includes(needle) || preview.includes(needle);
-    });
-  }, [chats, query, user, usersById]);
+      const preview = chat.lastMessage ? chat.lastMessage.text.toLowerCase() : "";
+      if (title.includes(needle) || preview.includes(needle)) {
+        filtered.push(chat);
+      }
+    }
+  }
 
   if (!user) {
     return null;
