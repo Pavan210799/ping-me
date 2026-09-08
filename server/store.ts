@@ -439,6 +439,34 @@ export function searchMessages(chatId: string, query: string): MessageRecord[] {
   });
 }
 
+export function searchAllMessages(userId: string, query: string): MessageRecord[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return [];
+  }
+
+  const myChats = listChatsForUser(userId);
+  const chatIds: { [id: string]: boolean } = {};
+  for (let i = 0; i < myChats.length; i += 1) {
+    chatIds[myChats[i].id] = true;
+  }
+
+  const matches: MessageRecord[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (!chatIds[message.chatId] || message.deletedAt) {
+      continue;
+    }
+    if (!message.text.toLowerCase().includes(needle)) {
+      continue;
+    }
+    matches.push(message);
+  }
+
+  matches.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return matches.slice(0, 40);
+}
+
 export function findMessageById(messageId: string): MessageRecord | undefined {
   return messages.find((message) => message.id === messageId);
 }

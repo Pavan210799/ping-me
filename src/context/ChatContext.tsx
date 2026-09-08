@@ -5,6 +5,7 @@ import {
   createDirectChatRequest,
   createGroupChatRequest,
   messagesRequest,
+  searchAllMessagesRequest,
   searchMessagesRequest,
   uploadFile,
   usersRequest,
@@ -30,6 +31,8 @@ type ChatContextValue = {
   toasts: ToastItem[];
   searchResults: Message[];
   searching: boolean;
+  globalSearchResults: Message[];
+  searchingGlobal: boolean;
   uploadProgress: number | null;
   replyTo: Message | null;
   setReplyTo: (message: Message | null) => void;
@@ -43,6 +46,7 @@ type ChatContextValue = {
   startTyping: () => void;
   stopTyping: () => void;
   searchInChat: (query: string) => Promise<void>;
+  searchAllChats: (query: string) => Promise<void>;
   startDirectChat: (userId: string) => Promise<void>;
   startGroupChat: (name: string, memberIds: string[]) => Promise<void>;
   dismissToast: (id: string) => void;
@@ -97,6 +101,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [searchResults, setSearchResults] = useState<Message[]>([]);
   const [searching, setSearching] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState<Message[]>([]);
+  const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
 
@@ -555,6 +561,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     toasts,
     searchResults,
     searching,
+    globalSearchResults,
+    searchingGlobal,
     uploadProgress,
     replyTo,
     setReplyTo,
@@ -597,6 +605,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setSearchResults(results);
       } finally {
         setSearching(false);
+      }
+    },
+    async searchAllChats(query) {
+      const needle = query.trim();
+      if (!needle) {
+        setGlobalSearchResults([]);
+        setSearchingGlobal(false);
+        return;
+      }
+      setSearchingGlobal(true);
+      try {
+        const results = await searchAllMessagesRequest(needle);
+        setGlobalSearchResults(results);
+      } finally {
+        setSearchingGlobal(false);
       }
     },
     async startDirectChat(userId) {

@@ -27,6 +27,7 @@ import {
   markDelivered,
   refreshMessageStatus,
   removeMessage,
+  searchAllMessages,
   searchMessages,
   setUserOnline,
   toPublicUser,
@@ -278,6 +279,15 @@ app.get("/api/chats/:chatId/messages/search", (req, res) => {
   }
   const query = String(req.query.q ?? "");
   res.json(searchMessages(chat.id, query));
+});
+
+app.get("/api/messages/search", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) {
+    return;
+  }
+  const query = String(req.query.q ?? "");
+  res.json(searchAllMessages(user.id, query));
 });
 
 app.post("/api/upload", upload.single("file"), (req, res) => {

@@ -212,6 +212,21 @@ export async function searchMessagesRequest(chatId: string, query: string) {
   return response.json() as Promise<Message[]>;
 }
 
+export async function searchAllMessagesRequest(query: string) {
+  const url = `/api/messages/search?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to search messages."));
+  }
+
+  return response.json() as Promise<Message[]>;
+}
+
 export function uploadFile(
   file: File,
   token: string,
