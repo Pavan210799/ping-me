@@ -41,11 +41,13 @@ import {
 
 const JWT_SECRET = process.env.JWT_SECRET || "pingme-dev-secret";
 const PORT = Number(process.env.PORT) || 4000;
-const currentFile = fileURLToPath(import.meta.url);
-const currentDir = path.dirname(currentFile);
-const uploadsDir = process.env.AWS_LAMBDA_FUNCTION_NAME
-  ? path.join("/tmp", "pingme-uploads")
-  : path.join(currentDir, "uploads");
+let currentDir = "/tmp";
+try {
+  currentDir = path.dirname(fileURLToPath(import.meta.url));
+} catch {
+  currentDir = "/tmp";
+}
+const uploadsDir = path.join(currentDir, "uploads");
 const distDir = path.join(currentDir, "..", "dist");
 
 type SocketClient = {
@@ -710,7 +712,7 @@ socketServer.on("connection", (socket) => {
   });
 });
 
-if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.LAMBDA_TASK_ROOT) {
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`PingMe API and WebSocket running on http://0.0.0.0:${PORT}`);
   });
