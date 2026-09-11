@@ -35,6 +35,7 @@ export function MessageBubble({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.text);
   const [burst, setBurst] = useState<{ emoji: string; key: number } | null>(null);
+  const [bounceEmoji, setBounceEmoji] = useState("");
   const actionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,7 +61,9 @@ export function MessageBubble({
   const reply = message.replyToId
     ? messages.find((item) => item.id === message.replyToId)
     : undefined;
-  const myReaction = message.reactions.find((reaction) => reaction.userId === user.id)?.emoji;
+  const reactions = message.reactions || [];
+  const attachments = message.attachments || [];
+  const myReaction = reactions.find((reaction) => reaction.userId === user.id)?.emoji;
 
   async function copyText() {
     await navigator.clipboard.writeText(message.text);
@@ -69,7 +72,9 @@ export function MessageBubble({
 
   function react(emoji: string) {
     setBurst({ emoji, key: Date.now() });
+    setBounceEmoji(emoji);
     window.setTimeout(() => setBurst(null), 700);
+    window.setTimeout(() => setBounceEmoji(""), 500);
     reactToMessage(message.id, emoji);
     setPickerOpen(false);
     setMenuOpen(false);
@@ -85,6 +90,8 @@ export function MessageBubble({
             <Avatar
               name={sender?.name ?? "User"}
               color={sender?.avatarColor ?? "#9a9087"}
+              imageUrl={sender?.avatarUrl}
+              userId={message.senderId}
               size={28}
             />
           ) : (
@@ -111,22 +118,18 @@ export function MessageBubble({
             }}
           >
             {pickerOpen && (
-              <div
-                className={`absolute -top-11 left-1/2 z-20 flex -translate-x-1/2 animate-pop-in gap-1 rounded-full px-1.5 py-1 ${
-                  mine ? "" : "border border-line bg-card shadow-lg"
-                }`}
-              >
+              <div className="absolute -top-12 left-1/2 z-20 flex -translate-x-1/2 animate-pop-in gap-0.5 rounded-full border border-line bg-card px-1.5 py-1 shadow-lg">
                 {REACTION_EMOJIS.map((emoji) => (
                   <button
                     type="button"
                     key={emoji}
                     onClick={() => react(emoji)}
-                    className={`rounded-full p-1 transition hover:scale-125 ${
-                      mine ? "text-white" : "text-accent"
-                    } ${myReaction === emoji ? "scale-110" : "opacity-80"}`}
+                    className={`ig-react-pick rounded-full p-1 transition ${
+                      myReaction === emoji ? "scale-110" : ""
+                    }`}
                     aria-label={`React with ${emoji}`}
                   >
-                    <ThemeEmoji emoji={emoji} size={18} onSent={mine} />
+                    <ThemeEmoji emoji={emoji} size={20} />
                   </button>
                 ))}
               </div>
@@ -135,16 +138,14 @@ export function MessageBubble({
               BURSTS.map((offset, index) => (
                 <span
                   key={`${burst.key}-${index}`}
-                  className={`animate-react-burst pointer-events-none absolute top-0 right-3 ${
-                    mine ? "text-white" : "text-accent"
-                  }`}
+                  className="animate-react-burst pointer-events-none absolute top-0 right-3"
                   style={{
                     ["--burst-x" as string]: offset.x,
                     ["--burst-y" as string]: offset.y,
                     animationDelay: `${index * 40}ms`,
                   }}
                 >
-                  <ThemeEmoji emoji={burst.emoji} size={18} onSent={mine} />
+                  <ThemeEmoji emoji={burst.emoji} size={18} />
                 </span>
               ))}
             {reply && (
@@ -175,7 +176,7 @@ export function MessageBubble({
               </form>
             ) : (
               <>
-                {message.attachments.map((file) =>
+                {attachments.map((file) =>
                   file.kind === "image" ? (
                     <img
                       key={file.id}
@@ -217,10 +218,10 @@ export function MessageBubble({
               )}
             </div>
 
-            {message.reactions.length > 0 && (
+            {reactions.length > 0 && (
               <div className="absolute -bottom-3 left-2 flex gap-1">
                 {Object.entries(
-                  message.reactions.reduce<Record<string, number>>((counts, reaction) => {
+                  reactions.reduce<Record<string, number>>((counts, reaction) => {
                     counts[reaction.emoji] = (counts[reaction.emoji] ?? 0) + 1;
                     return counts;
                   }, {}),
@@ -229,11 +230,13 @@ export function MessageBubble({
                     type="button"
                     key={`${message.id}-${emoji}-${count}`}
                     onClick={() => react(emoji)}
-                    className={`animate-react-pop flex items-center gap-0.5 bg-transparent px-0.5 text-[11px] transition hover:scale-125 ${
-                      mine ? "text-white" : "text-accent"
-                    } ${myReaction === emoji ? "opacity-100" : "opacity-80"}`}
+                    className={`flex items-center gap-0.5 rounded-full border border-line bg-card px-1.5 py-0.5 text-[11px] shadow-sm transition hover:scale-110 ${
+                      bounceEmoji === emoji ? "animate-ig-react" : ""
+                    } ${emoji === "❤️" && bounceEmoji === emoji ? "ig-react-heart" : ""} ${
+                      myReaction === emoji ? "ring-1 ring-accent" : ""
+                    }`}
                   >
-                    <ThemeEmoji emoji={emoji} size={14} onSent={mine} />
+                    <ThemeEmoji emoji={emoji} size={14} />
                     {count > 1 ? count : ""}
                   </button>
                 ))}

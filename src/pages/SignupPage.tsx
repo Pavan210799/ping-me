@@ -36,6 +36,8 @@ export function SignupPage() {
             value={name}
             onChange={(event) => setName(event.target.value)}
             required
+            placeholder="Enter your name"
+            autoComplete="name"
             className="mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-ink outline-none transition focus:border-accent"
           />
         </label>
@@ -46,6 +48,8 @@ export function SignupPage() {
             onChange={(event) => setEmail(event.target.value)}
             type="email"
             required
+            placeholder="Enter your email"
+            autoComplete="email"
             className="mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-ink outline-none transition focus:border-accent"
           />
         </label>
@@ -55,6 +59,8 @@ export function SignupPage() {
           onChange={(event) => setPassword(event.target.value)}
           minLength={6}
           required
+          placeholder="Create a password (6+ characters)"
+          autoComplete="new-password"
         />
         {error && (
           <p className="rounded-xl bg-failed/10 px-3 py-2 text-sm text-failed">{error}</p>

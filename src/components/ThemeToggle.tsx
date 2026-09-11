@@ -8,10 +8,12 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="rounded-xl p-2 text-quiet transition hover:bg-hover hover:text-ink hover:scale-110 hover:rotate-12"
+      className="group rounded-xl border border-line bg-card p-2 text-quiet transition hover:bg-hover hover:text-ink hover:scale-110"
       aria-label="Toggle theme"
     >
-      {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+      <span className="flex transition duration-200 group-hover:rotate-90">
+        {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+      </span>
     </button>
   );
 }

@@ -9,6 +9,7 @@ import {
   resetPasswordRequest,
   signupRequest,
   storeToken,
+  updateProfileRequest,
 } from "../api";
 import type { User } from "../types";
 
@@ -20,6 +21,15 @@ type AuthContextValue = {
   signup: (name: string, email: string, password: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (email: string, password: string) => Promise<void>;
+  updateProfile: (data: {
+    name: string;
+    email: string;
+    currentPassword: string;
+    newPassword: string;
+    avatarUrl: string;
+  }) => Promise<void>;
+  applyUser: (nextUser: User) => void;
+  saveAvatar: (avatarUrl: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -40,10 +50,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(function (nextUser) {
         setUser(nextUser);
       })
-      .catch(function () {
-        clearToken();
-        setToken(null);
-        setUser(null);
+      .catch(function (error: Error) {
+        if (error.message === "unauthorized") {
+          clearToken();
+          setToken(null);
+          setUser(null);
+        }
       })
       .finally(function () {
         setLoading(false);
@@ -73,6 +85,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await resetPasswordRequest(email, password);
   }
 
+  async function updateProfile(data: {
+    name: string;
+    email: string;
+    currentPassword: string;
+    newPassword: string;
+    avatarUrl: string;
+  }) {
+    const nextUser = await updateProfileRequest(data);
+    setUser(nextUser);
+  }
+
+  function applyUser(nextUser: User) {
+    setUser(function (current) {
+      if (!current || current.id !== nextUser.id) {
+        return current;
+      }
+      return nextUser;
+    });
+  }
+
+  async function saveAvatar(avatarUrl: string) {
+    if (!user) {
+      return;
+    }
+    setUser({ ...user, avatarUrl });
+    const nextUser = await updateProfileRequest({
+      name: user.name,
+      email: user.email,
+      currentPassword: "",
+      newPassword: "",
+      avatarUrl,
+    });
+    setUser(nextUser);
+  }
+
   function logout() {
     clearToken();
     setToken(null);
@@ -87,6 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signup,
     requestPasswordReset,
     resetPassword,
+    updateProfile,
+    applyUser,
+    saveAvatar,
     logout,
   };
 

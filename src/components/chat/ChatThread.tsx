@@ -1,4 +1,4 @@
-import { ArrowLeft, Search, X } from "lucide-react";
+import { ArrowLeft, Search, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useChat } from "../../context/ChatContext";
@@ -7,6 +7,7 @@ import { chatTitle, formatLastSeen, formatTime } from "../../lib/format";
 import { Avatar } from "../Avatar";
 import { Composer } from "./Composer";
 import { ChatBackground } from "./ChatBackground";
+import { GroupSettingsModal } from "./GroupSettingsModal";
 import { MessageList } from "./MessageList";
 
 export function ChatThread({ onBack }: { onBack: () => void }) {
@@ -18,8 +19,10 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
     searchInChat,
     searchResults,
     searching,
+    revealMessage,
   } = useChat();
   const [showSearch, setShowSearch] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [query, setQuery] = useState("");
   const [, setLastSeenTick] = useState(0);
   const debouncedQuery = useDebounce(query, 300);
@@ -65,6 +68,8 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
         <Avatar
           name={title}
           group={activeChat.type === "group"}
+          imageUrl={activeChat.type === "direct" ? other?.avatarUrl : undefined}
+          userId={activeChat.type === "direct" ? otherId : undefined}
           online={activeChat.type === "direct" ? other?.online : undefined}
           showStatus={activeChat.type === "direct"}
         />
@@ -92,6 +97,18 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
         >
           {showSearch ? <X size={18} /> : <Search size={18} />}
         </button>
+        {activeChat.type === "group" && (
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="group rounded-xl p-2 text-quiet transition hover:bg-hover hover:text-ink hover:scale-110"
+            aria-label="Group settings"
+          >
+            <span className="flex transition duration-200 group-hover:rotate-90 group-active:rotate-90">
+              <Settings size={18} />
+            </span>
+          </button>
+        )}
       </header>
 
       {showSearch && (
@@ -114,6 +131,7 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
                 onClick={() => {
                   setShowSearch(false);
                   setQuery("");
+                  void revealMessage(message.chatId, message.id);
                 }}
                 className="block w-full truncate rounded-lg px-2 py-2 text-left text-sm transition hover:bg-hover"
               >
@@ -129,20 +147,10 @@ export function ChatThread({ onBack }: { onBack: () => void }) {
         <MessageList />
       </div>
 
-      {typingNames && (
-        <div className="relative z-10 flex items-center gap-2 px-5 pb-1 text-xs text-accent">
-          <span className="flex gap-1">
-            <span className="typing-dot h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="typing-dot h-1.5 w-1.5 rounded-full bg-accent [animation-delay:150ms]" />
-            <span className="typing-dot h-1.5 w-1.5 rounded-full bg-accent [animation-delay:300ms]" />
-          </span>
-          {typingNames} typing...
-        </div>
-      )}
-
       <div className="relative z-10">
         <Composer />
       </div>
+      {showSettings && <GroupSettingsModal onClose={() => setShowSettings(false)} />}
     </section>
   );
 }

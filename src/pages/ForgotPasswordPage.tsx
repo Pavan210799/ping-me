@@ -38,6 +38,7 @@ export function ForgotPasswordPage() {
             type="email"
             required
             autoComplete="email"
+            placeholder="Enter the email on your account"
             className="mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-ink outline-none transition focus:border-accent hover:border-line-hover"
           />
         </label>

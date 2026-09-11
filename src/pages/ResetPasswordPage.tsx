@@ -48,6 +48,7 @@ export function ResetPasswordPage() {
             type="email"
             required
             autoComplete="email"
+            placeholder="Enter your email"
             className="mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-ink outline-none transition focus:border-accent hover:border-line-hover"
           />
         </label>
@@ -58,6 +59,7 @@ export function ResetPasswordPage() {
           minLength={6}
           required
           autoComplete="new-password"
+          placeholder="Choose a new password"
         />
         <PasswordField
           label="Confirm password"
@@ -66,6 +68,7 @@ export function ResetPasswordPage() {
           minLength={6}
           required
           autoComplete="new-password"
+          placeholder="Re-enter your new password"
         />
         {error && (
           <p className="rounded-xl bg-failed/10 px-3 py-2 text-sm text-failed">{error}</p>

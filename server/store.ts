@@ -24,6 +24,7 @@ const users: UserRecord[] = [
     email: "pavan@gmail.com",
     passwordHash,
     avatarColor: "#d95d39",
+    avatarUrl: "",
     lastSeen: new Date().toISOString(),
   },
   {
@@ -32,6 +33,7 @@ const users: UserRecord[] = [
     email: "sagi@gmail.com",
     passwordHash,
     avatarColor: "#5c8f7a",
+    avatarUrl: "",
     lastSeen: hoursAgo(1),
   },
   {
@@ -40,6 +42,7 @@ const users: UserRecord[] = [
     email: "kumar@gmail.com",
     passwordHash,
     avatarColor: "#3d8fd4",
+    avatarUrl: "",
     lastSeen: minutesAgo(18),
   },
   {
@@ -48,6 +51,7 @@ const users: UserRecord[] = [
     email: "rahul@gmail.com",
     passwordHash,
     avatarColor: "#c4784a",
+    avatarUrl: "",
     lastSeen: hoursAgo(4),
   },
   {
@@ -56,6 +60,7 @@ const users: UserRecord[] = [
     email: "akhil@gmail.com",
     passwordHash,
     avatarColor: "#8c6a4f",
+    avatarUrl: "",
     lastSeen: hoursAgo(9),
   },
   {
@@ -64,6 +69,7 @@ const users: UserRecord[] = [
     email: "vishnu@gmail.com",
     passwordHash,
     avatarColor: "#6b7fd4",
+    avatarUrl: "",
     lastSeen: hoursAgo(6),
   },
 ];
@@ -75,7 +81,7 @@ const chats: ChatRecord[] = [
     name: "",
     memberIds: ["user-pavan", "user-kumar"],
     adminIds: ["user-pavan", "user-kumar"],
-    createdAt: hoursAgo(72),
+    createdAt: hoursAgo(10),
   },
   {
     id: "chat-pavan-sagi",
@@ -83,26 +89,40 @@ const chats: ChatRecord[] = [
     name: "",
     memberIds: ["user-pavan", "user-sagi"],
     adminIds: ["user-pavan", "user-sagi"],
-    createdAt: hoursAgo(40),
+    createdAt: hoursAgo(6),
   },
   {
-    id: "chat-squad",
+    id: "chat-my-group",
     type: "group",
-    name: "my group",
-    memberIds: ["user-pavan", "user-sagi", "user-kumar"],
+    name: "My Group",
+    memberIds: ["user-pavan", "user-sagi", "user-kumar", "user-rahul", "user-akhil"],
     adminIds: ["user-pavan"],
-    createdAt: hoursAgo(36),
+    createdAt: hoursAgo(8),
   },
 ];
 
-function makeMessage(
+function membersExcept(chatId: string, senderId: string): string[] {
+  const chat = chats.find((item) => item.id === chatId);
+  if (!chat) {
+    return [];
+  }
+  const others: string[] = [];
+  for (let i = 0; i < chat.memberIds.length; i += 1) {
+    if (chat.memberIds[i] !== senderId) {
+      others.push(chat.memberIds[i]);
+    }
+  }
+  return others;
+}
+
+function seedChatMessage(
   id: string,
   chatId: string,
   senderId: string,
   text: string,
   createdAt: string,
-  extra: Partial<MessageRecord> = {},
 ): MessageRecord {
+  const others = membersExcept(chatId, senderId);
   return {
     id,
     chatId,
@@ -112,171 +132,191 @@ function makeMessage(
     attachments: [],
     reactions: [],
     status: "read",
-    deliveredTo: chats
-      .find((chat) => chat.id === chatId)
-      ?.memberIds.filter((memberId) => memberId !== senderId) ?? [],
-    readBy: chats
-      .find((chat) => chat.id === chatId)
-      ?.memberIds.filter((memberId) => memberId !== senderId) ?? [],
-    ...extra,
+    deliveredTo: others.slice(),
+    readBy: others.slice(),
   };
 }
 
-const kumarThread: { sender: "user-pavan" | "user-kumar"; text: string }[] = [
-  { sender: "user-kumar", text: "Pavan, did you push the PingMe auth screens?" },
-  { sender: "user-pavan", text: "Not yet. Finishing the login card first." },
-  { sender: "user-kumar", text: "Cool. Keep the terracotta button, it looks premium." },
-  { sender: "user-pavan", text: "Agreed. Cream background + terracotta send bubble." },
-  { sender: "user-kumar", text: "Can we seed a long thread so pagination is obvious?" },
-  { sender: "user-pavan", text: "Yes — this chat will have a lot of older messages." },
-  { sender: "user-kumar", text: "Perfect. Reviewers can scroll up and load earlier ones." },
-  { sender: "user-pavan", text: "Limit is 12 per page. Older messages stay on the server." },
-  { sender: "user-kumar", text: "Also add a load-earlier hint at the top." },
-  { sender: "user-pavan", text: "On it. Intersection observer + a button." },
-  { sender: "user-kumar", text: "Sagi asked if group chat is ready." },
-  { sender: "user-pavan", text: "The squad group is seeded. He can jump in there." },
-  { sender: "user-kumar", text: "Rahul, Akhil, and Vishnu should exist too, right?" },
-  { sender: "user-pavan", text: "Yes, for New Chat. No history with them yet." },
-  { sender: "user-kumar", text: "Password is 123456 for every demo account?" },
-  { sender: "user-pavan", text: "Correct. Easy to type during the review." },
-  { sender: "user-kumar", text: "Add an eye toggle on the password field." },
-  { sender: "user-pavan", text: "Doing that next so the demo login is clearer." },
-  { sender: "user-kumar", text: "Reactions should replace, not stack, for one user." },
-  { sender: "user-pavan", text: "If I tap ❤️ after 👍, only the heart stays." },
-  { sender: "user-kumar", text: "Five options is enough. Don’t crowd the bubble." },
-  { sender: "user-pavan", text: "👍 ❤️ 😂 😮 🎉 — that’s the set." },
-  { sender: "user-kumar", text: "Animate the reaction so it pops." },
-  { sender: "user-pavan", text: "Pop + a little float. Hover scale on the picker too." },
-  { sender: "user-kumar", text: "Chat canvas feels flat. Can we add a pattern?" },
-  { sender: "user-pavan", text: "Warm paper texture with faint ping marks." },
-  { sender: "user-kumar", text: "Auth pages need a theme-aware moving background." },
-  { sender: "user-pavan", text: "Light orbs for cream, ember glow for dark mode." },
-  { sender: "user-kumar", text: "Logo should sit on transparent, no cream tile." },
-  { sender: "user-pavan", text: "Switched it to an SVG so the bubble is the mark." },
-  { sender: "user-kumar", text: "I’m around if you want a second browser for live tests." },
-  { sender: "user-pavan", text: "Yes — log in as kumar@gmail.com in a private window." },
-  { sender: "user-kumar", text: "Typing indicators still feel good?" },
-  { sender: "user-pavan", text: "They do. The bounce dots match the accent." },
-  { sender: "user-kumar", text: "Last thing: open this thread when Pavan signs in." },
-  { sender: "user-pavan", text: "Done. You’ll see this history immediately after login." },
-  { sender: "user-kumar", text: "Scroll up from here to pull the older pages." },
-  { sender: "user-pavan", text: "This is the latest message. Older ones are above." },
-  { sender: "user-kumar", text: "Pavan, can you also check the unread badge on Sagi?" },
-  { sender: "user-pavan", text: "Yes, it should show 1 until I open that chat." },
-  { sender: "user-kumar", text: "Nice. I’m sending a few more notes so the thread stays long." },
-  { sender: "user-pavan", text: "Keep going — pagination only loads 8 at a time." },
-  { sender: "user-kumar", text: "Morning standup is at 10. Want me to cover the chat demo?" },
-  { sender: "user-pavan", text: "Please. I’ll join from the other room." },
-  { sender: "user-kumar", text: "Bring the Kumar thread on screen first. It shows history well." },
-  { sender: "user-pavan", text: "That’s the plan. Sign in as Pavan and this chat opens." },
-  { sender: "user-kumar", text: "If reviewers scroll up they should see Load earlier messages." },
-  { sender: "user-pavan", text: "Exactly. Newest lines stay at the bottom." },
+function seedSystemMessage(
+  id: string,
+  chatId: string,
+  text: string,
+  createdAt: string,
+): MessageRecord {
+  return {
+    id,
+    chatId,
+    senderId: "system",
+    text,
+    createdAt,
+    kind: "system",
+    attachments: [],
+    reactions: [],
+    status: "sent",
+    deliveredTo: [],
+    readBy: [],
+  };
+}
+
+function formatNameList(names: string[]): string {
+  if (names.length === 0) {
+    return "";
+  }
+  if (names.length === 1) {
+    return names[0];
+  }
+  if (names.length === 2) {
+    return names[0] + " and " + names[1];
+  }
+  return names.slice(0, names.length - 1).join(", ") + " and " + names[names.length - 1];
+}
+
+function seedThread(
+  chatId: string,
+  prefix: string,
+  lines: { senderId: string; text: string }[],
+  gapMinutes: number,
+): MessageRecord[] {
+  const result: MessageRecord[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    result.push(
+      seedChatMessage(
+        prefix + (i + 1),
+        chatId,
+        lines[i].senderId,
+        lines[i].text,
+        minutesAgo((lines.length - i) * gapMinutes),
+      ),
+    );
+  }
+  return result;
+}
+
+const pavanKumarLines = [
+  { senderId: "user-kumar", text: "Hey Pavan" },
+  { senderId: "user-pavan", text: "Hey Kumar, whats up?" },
+  { senderId: "user-kumar", text: "All good. Did you check the latest PingMe build?" },
+  { senderId: "user-pavan", text: "Yeah, I opened it a while ago." },
+  { senderId: "user-kumar", text: "How does the sidebar feel on mobile?" },
+  { senderId: "user-pavan", text: "Pretty clean. Profile card at the bottom looks nice." },
+  { senderId: "user-kumar", text: "Nice. I liked the toasts too." },
+  { senderId: "user-pavan", text: "They sit above the profile now, right side." },
+  { senderId: "user-kumar", text: "Can you try a long message once?" },
+  { senderId: "user-pavan", text: "This one should wrap, and in a toast it should cut with an ellipsis at the end." },
+  { senderId: "user-kumar", text: "Perfect. Blue ticks showed on my side after you opened the chat." },
+  { senderId: "user-pavan", text: "Good. Typing bubble should linger a second after you pause." },
+  { senderId: "user-kumar", text: "I noticed that. Feels more natural." },
+  { senderId: "user-pavan", text: "Are you joining My Group later?" },
+  { senderId: "user-kumar", text: "Already in it. Sagi, Rahul, and Akhil are there too." },
+  { senderId: "user-pavan", text: "Cool. I will drop a note there." },
+  { senderId: "user-kumar", text: "Did you eat yet?" },
+  { senderId: "user-pavan", text: "Not yet. Maybe after this." },
+  { senderId: "user-kumar", text: "Same. I have one more review to finish." },
+  { senderId: "user-pavan", text: "Take your time." },
+  { senderId: "user-kumar", text: "Also, search in the sidebar is decent." },
+  { senderId: "user-pavan", text: "People first, then chats. That order is better." },
+  { senderId: "user-kumar", text: "Agreed." },
+  { senderId: "user-pavan", text: "I still need to try Vishnu as a new chat." },
+  { senderId: "user-kumar", text: "Leave him out so new chat is easy to demo." },
+  { senderId: "user-pavan", text: "That was the plan." },
+  { senderId: "user-kumar", text: "Scroll this thread a bit. It should be long enough now." },
+  { senderId: "user-pavan", text: "Yup, I can load earlier messages from the top." },
+  { senderId: "user-kumar", text: "There is a short wait so the loading label shows." },
+  { senderId: "user-pavan", text: "Saw it. Loading earlier messages..." },
+  { senderId: "user-kumar", text: "Great." },
+  { senderId: "user-pavan", text: "Reactions still feel like Instagram?" },
+  { senderId: "user-kumar", text: "Yeah, the heart and laugh look right." },
+  { senderId: "user-pavan", text: "I will keep them." },
+  { senderId: "user-kumar", text: "Dark mode toggle is in the header." },
+  { senderId: "user-pavan", text: "Square button, icon rotates on hover." },
+  { senderId: "user-kumar", text: "Small thing but it looks polished." },
+  { senderId: "user-pavan", text: "Thanks." },
+  { senderId: "user-kumar", text: "If the mentor asks, seeded users all use 123456." },
+  { senderId: "user-pavan", text: "I know. pavan@gmail.com is fine even with capital P." },
+  { senderId: "user-kumar", text: "Do not type gamil though." },
+  { senderId: "user-pavan", text: "Haha noted." },
+  { senderId: "user-kumar", text: "I am around if you want to test typing from two windows." },
+  { senderId: "user-pavan", text: "Maybe in a bit." },
+  { senderId: "user-kumar", text: "Okay." },
+  { senderId: "user-pavan", text: "Did Sagi message you?" },
+  { senderId: "user-kumar", text: "Only in the group. He chats with you 1-1." },
+  { senderId: "user-pavan", text: "Right." },
+  { senderId: "user-kumar", text: "Ping me when you are free." },
+  { senderId: "user-pavan", text: "Will do." },
+  { senderId: "user-kumar", text: "Later." },
+  { senderId: "user-pavan", text: "Later Kumar." },
+];
+
+const pavanSagiLines = [
+  { senderId: "user-sagi", text: "Pavan, did you push the latest UI?" },
+  { senderId: "user-pavan", text: "Yes, the chat page is up. Take a look when you can." },
+  { senderId: "user-sagi", text: "Looks clean. The cream background feels nicer." },
+  { senderId: "user-pavan", text: "Thanks. I will tweak a few small things later." },
+  { senderId: "user-sagi", text: "Cool. See you in My Group." },
+];
+
+const myGroupLines = [
+  { senderId: "user-pavan", text: "Welcome to My Group." },
+  { senderId: "user-sagi", text: "Thanks for adding us." },
+  { senderId: "user-kumar", text: "Let's use this for updates." },
+  { senderId: "user-rahul", text: "Sounds good." },
+  { senderId: "user-akhil", text: "I am in. What are we covering today?" },
+  { senderId: "user-pavan", text: "Quick check of chat, ticks, and group typing." },
+  { senderId: "user-sagi", text: "I can test from my account." },
+  { senderId: "user-kumar", text: "Same here." },
+  { senderId: "user-rahul", text: "Should we keep Vishnu out of this one?" },
+  { senderId: "user-pavan", text: "Yes. He is the new-chat demo." },
+  { senderId: "user-akhil", text: "Makes sense." },
+  { senderId: "user-sagi", text: "I dropped a note in the 1-1 as well." },
+  { senderId: "user-pavan", text: "Saw it." },
+  { senderId: "user-kumar", text: "The long Pavan chat is for scrolling." },
+  { senderId: "user-rahul", text: "I will not spam that thread then." },
+  { senderId: "user-akhil", text: "I will drop standup notes here." },
+  { senderId: "user-pavan", text: "Perfect." },
+  { senderId: "user-sagi", text: "Anyone on later tonight?" },
+  { senderId: "user-kumar", text: "I can join after 8." },
+  { senderId: "user-pavan", text: "See you all in the evening." },
+  { senderId: "user-rahul", text: "Later." },
 ];
 
 const messages: MessageRecord[] = [
-  ...kumarThread.map((line, index) =>
-    makeMessage(
-      `msg-kumar-${index + 1}`,
-      "chat-pavan-kumar",
-      line.sender,
-      line.text,
-      index < 20 ? hoursAgo(30 - index * 0.6) : minutesAgo((kumarThread.length - index) * 5),
-      index === kumarThread.length - 3
-        ? { reactions: [{ emoji: "👍", userId: "user-pavan" }] }
-        : index === kumarThread.length - 1
-          ? { status: "delivered", readBy: [], deliveredTo: ["user-kumar"] }
-          : {},
-    ),
-  ),
-  makeMessage(
-    "msg-sagi-1",
-    "chat-pavan-sagi",
-    "user-sagi",
-    "Pavan, logo looks cleaner without the cream square.",
-    hoursAgo(6),
-    { reactions: [{ emoji: "🎉", userId: "user-pavan" }] },
-  ),
-  makeMessage(
-    "msg-sagi-2",
-    "chat-pavan-sagi",
-    "user-pavan",
-    "Thanks. It’s an SVG now so it works on any background.",
-    hoursAgo(5.5),
-  ),
-  makeMessage(
-    "msg-sagi-3",
-    "chat-pavan-sagi",
-    "user-sagi",
-    "Want me to test dark mode on the auth orbs?",
-    hoursAgo(5),
-  ),
-  makeMessage(
-    "msg-sagi-4",
-    "chat-pavan-sagi",
-    "user-pavan",
-    "Yes please. Toggle the sun/moon on the login screen.",
-    hoursAgo(4.7),
-  ),
-  makeMessage(
-    "msg-sagi-5",
-    "chat-pavan-sagi",
-    "user-sagi",
-    "Looks great. Catch you in the squad group.",
-    minutesAgo(50),
-    { status: "delivered", readBy: [], deliveredTo: ["user-pavan"] },
-  ),
-  makeMessage(
-    "msg-squad-1",
-    "chat-squad",
-    "user-sagi",
-    "Squad chat is live. Drop updates here.",
+  ...seedThread("chat-pavan-kumar", "msg-dm-", pavanKumarLines, 9),
+  ...seedThread("chat-pavan-sagi", "msg-sagi-", pavanSagiLines, 14),
+  seedSystemMessage(
+    "msg-group-created",
+    "chat-my-group",
+    "Pavan created this group",
     hoursAgo(8),
   ),
-  makeMessage(
-    "msg-squad-2",
-    "chat-squad",
-    "user-kumar",
-    "I’ll review the Kumar thread pagination tonight.",
-    hoursAgo(7),
+  seedSystemMessage(
+    "msg-group-added",
+    "chat-my-group",
+    "Pavan added Sagi, Kumar, Rahul and Akhil",
+    minutesAgo(8 * 60 - 1),
   ),
-  makeMessage(
-    "msg-squad-3",
-    "chat-squad",
-    "user-pavan",
-    "Sounds good. Rahul and the others can be added later.",
-    hoursAgo(6.5),
-    { replyToId: "msg-squad-1", reactions: [{ emoji: "❤️", userId: "user-sagi" }] },
-  ),
-  makeMessage(
-    "msg-squad-4",
-    "chat-squad",
-    "user-sagi",
-    "Rahul, Akhil, Vishnu are in the directory if we need them.",
-    minutesAgo(80),
-  ),
+  ...seedThread("chat-my-group", "msg-group-", myGroupLines, 16),
 ];
 
-for (const user of users) {
-  for (const message of messages) {
-    if (message.senderId === user.id && message.createdAt > user.lastSeen) {
-      user.lastSeen = message.createdAt;
-    }
-  }
-}
-
+const seedReadAt = new Date().toISOString();
 const lastReadAt: Record<string, Record<string, string>> = {
   "user-pavan": {
-    "chat-pavan-kumar": minutesAgo(8),
-    "chat-pavan-sagi": hoursAgo(5),
-    "chat-squad": hoursAgo(6),
-  },
-  "user-sagi": {
-    "chat-pavan-sagi": minutesAgo(50),
-    "chat-squad": minutesAgo(80),
+    "chat-pavan-kumar": seedReadAt,
+    "chat-pavan-sagi": seedReadAt,
+    "chat-my-group": seedReadAt,
   },
   "user-kumar": {
-    "chat-pavan-kumar": minutesAgo(20),
-    "chat-squad": hoursAgo(7),
+    "chat-pavan-kumar": seedReadAt,
+    "chat-my-group": seedReadAt,
+  },
+  "user-sagi": {
+    "chat-pavan-sagi": seedReadAt,
+    "chat-my-group": seedReadAt,
+  },
+  "user-rahul": {
+    "chat-my-group": seedReadAt,
+  },
+  "user-akhil": {
+    "chat-my-group": seedReadAt,
   },
 };
 
@@ -288,6 +328,7 @@ export function toPublicUser(user: UserRecord): PublicUser {
     name: user.name,
     email: user.email,
     avatarColor: user.avatarColor,
+    avatarUrl: user.avatarUrl || "",
     online: onlineUserIds.has(user.id),
     lastSeen: user.lastSeen,
   };
@@ -312,6 +353,7 @@ export function createUser(name: string, email: string, password: string): UserR
     email: email.trim().toLowerCase(),
     passwordHash: bcrypt.hashSync(password, 8),
     avatarColor: ["#d95d39", "#5c8f7a", "#3d8fd4", "#c4784a"][users.length % 4],
+    avatarUrl: "",
     lastSeen: new Date().toISOString(),
   };
   users.push(user);
@@ -328,6 +370,55 @@ export function updatePassword(email: string, password: string): UserRecord {
     throw new Error("Password must be at least 6 characters.");
   }
   user.passwordHash = bcrypt.hashSync(password, 8);
+  return user;
+}
+
+export function updateUserProfile(
+  userId: string,
+  name: string,
+  email: string,
+  currentPassword: string,
+  newPassword: string,
+  avatarUrl: string,
+): UserRecord {
+  const user = findUserById(userId);
+  if (!user) {
+    throw new Error("User not found.");
+  }
+
+  const nextName = name.trim();
+  const nextEmail = email.trim().toLowerCase();
+  if (nextName.length < 2) {
+    throw new Error("Name must be at least 2 characters.");
+  }
+  if (!nextEmail) {
+    throw new Error("Enter an email address.");
+  }
+
+  const existing = findUserByEmail(nextEmail);
+  if (existing && existing.id !== userId) {
+    throw new Error("That email is already in use.");
+  }
+
+  user.name = nextName;
+  user.email = nextEmail;
+  user.avatarUrl = avatarUrl;
+
+  if (currentPassword || newPassword) {
+    if (!currentPassword) {
+      throw new Error("Enter your current password to set a new one.");
+    }
+    if (!newPassword) {
+      throw new Error("Enter a new password.");
+    }
+    if (!bcrypt.compareSync(currentPassword, user.passwordHash)) {
+      throw new Error("Current password is incorrect.");
+    }
+    if (newPassword.length < 6) {
+      throw new Error("Password must be at least 6 characters.");
+    }
+    user.passwordHash = bcrypt.hashSync(newPassword, 8);
+  }
   return user;
 }
 
@@ -398,7 +489,146 @@ export function createGroupChat(
     createdAt: new Date().toISOString(),
   };
   chats.push(chat);
+
+  const actor = findUserById(adminId);
+  const actorName = actor ? actor.name : "Someone";
+  createSystemMessage(chat.id, actorName + " created this group");
+
+  const addedNames: string[] = [];
+  for (let i = 0; i < uniqueMembers.length; i += 1) {
+    if (uniqueMembers[i] === adminId) {
+      continue;
+    }
+    const person = findUserById(uniqueMembers[i]);
+    if (person) {
+      addedNames.push(person.name);
+    }
+  }
+  if (addedNames.length > 0) {
+    createSystemMessage(chat.id, actorName + " added " + formatNameList(addedNames));
+  }
+
   return chat;
+}
+
+export function createSystemMessage(chatId: string, text: string): MessageRecord {
+  const message: MessageRecord = {
+    id: crypto.randomUUID(),
+    chatId,
+    senderId: "system",
+    text,
+    createdAt: new Date().toISOString(),
+    kind: "system",
+    attachments: [],
+    reactions: [],
+    status: "sent",
+    deliveredTo: [],
+    readBy: [],
+  };
+  messages.push(message);
+  return message;
+}
+
+function requireGroupMember(chatId: string, actorId: string): ChatRecord {
+  const chat = findChatById(chatId);
+  if (!chat || chat.type !== "group") {
+    throw new Error("Group not found.");
+  }
+  if (!chat.memberIds.includes(actorId)) {
+    throw new Error("You are not in this group.");
+  }
+  return chat;
+}
+
+export function renameGroup(
+  chatId: string,
+  actorId: string,
+  name: string,
+): { chat: ChatRecord; message: MessageRecord } {
+  const chat = requireGroupMember(chatId, actorId);
+  const nextName = name.trim();
+  if (nextName.length < 2) {
+    throw new Error("Group name must be at least 2 characters.");
+  }
+  if (nextName === chat.name) {
+    throw new Error("That is already the group name.");
+  }
+
+  const actor = findUserById(actorId);
+  chat.name = nextName;
+  const actorName = actor ? actor.name : "Someone";
+  const message = createSystemMessage(
+    chatId,
+    actorName + ' changed the group name to "' + nextName + '"',
+  );
+  return { chat, message };
+}
+
+export function addGroupMember(
+  chatId: string,
+  actorId: string,
+  userId: string,
+): { chat: ChatRecord; message: MessageRecord } {
+  const chat = requireGroupMember(chatId, actorId);
+  const person = findUserById(userId);
+  if (!person) {
+    throw new Error("User not found.");
+  }
+  if (chat.memberIds.includes(userId)) {
+    throw new Error("That person is already in the group.");
+  }
+
+  chat.memberIds.push(userId);
+  if (!lastReadAt[userId]) {
+    lastReadAt[userId] = {};
+  }
+  lastReadAt[userId][chatId] = new Date().toISOString();
+
+  const actor = findUserById(actorId);
+  const actorName = actor ? actor.name : "Someone";
+  const message = createSystemMessage(chatId, actorName + " added " + person.name);
+  return { chat, message };
+}
+
+export function removeGroupMember(
+  chatId: string,
+  actorId: string,
+  userId: string,
+): { chat: ChatRecord; message: MessageRecord; removedUserId: string } {
+  const chat = requireGroupMember(chatId, actorId);
+  const person = findUserById(userId);
+  if (!person || !chat.memberIds.includes(userId)) {
+    throw new Error("That person is not in this group.");
+  }
+  if (chat.memberIds.length <= 1) {
+    throw new Error("A group needs at least one member.");
+  }
+
+  const nextMembers: string[] = [];
+  for (let i = 0; i < chat.memberIds.length; i += 1) {
+    if (chat.memberIds[i] !== userId) {
+      nextMembers.push(chat.memberIds[i]);
+    }
+  }
+  chat.memberIds = nextMembers;
+
+  const nextAdmins: string[] = [];
+  for (let i = 0; i < chat.adminIds.length; i += 1) {
+    if (chat.adminIds[i] !== userId) {
+      nextAdmins.push(chat.adminIds[i]);
+    }
+  }
+  if (nextAdmins.length === 0 && nextMembers.length > 0) {
+    nextAdmins.push(nextMembers[0]);
+  }
+  chat.adminIds = nextAdmins;
+
+  const actor = findUserById(actorId);
+  const actorName = actor ? actor.name : "Someone";
+  const actionText =
+    userId === actorId ? actorName + " left" : actorName + " removed " + person.name;
+  const message = createSystemMessage(chatId, actionText);
+  return { chat, message, removedUserId: userId };
 }
 
 export function listMessages(
@@ -498,31 +728,50 @@ export function getUnreadCount(userId: string, chatId: string): number {
     return (
       message.chatId === chatId &&
       message.senderId !== userId &&
+      message.kind !== "system" &&
+      message.senderId !== "system" &&
       !message.deletedAt &&
       message.createdAt > readAt
     );
   }).length;
 }
 
-export function markChatRead(userId: string, chatId: string, messageIds: string[]): void {
+export function markChatRead(userId: string, chatId: string, _messageIds: string[]): MessageRecord[] {
   if (!lastReadAt[userId]) {
     lastReadAt[userId] = {};
   }
   lastReadAt[userId][chatId] = new Date().toISOString();
 
-  for (const messageId of messageIds) {
-    const message = findMessageById(messageId);
-    if (!message || message.senderId === userId) {
+  const updated: MessageRecord[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (
+      message.chatId !== chatId ||
+      message.senderId === userId ||
+      message.deletedAt ||
+      message.kind === "system" ||
+      message.senderId === "system"
+    ) {
       continue;
     }
+
+    let changed = false;
     if (!message.readBy.includes(userId)) {
       message.readBy.push(userId);
+      changed = true;
     }
     if (!message.deliveredTo.includes(userId)) {
       message.deliveredTo.push(userId);
+      changed = true;
     }
+
+    const before = message.status;
     refreshMessageStatus(message);
+    if (changed || before !== message.status) {
+      updated.push(message);
+    }
   }
+  return updated;
 }
 
 export function markDelivered(userId: string, chatId: string): MessageRecord[] {
@@ -541,6 +790,9 @@ export function markDelivered(userId: string, chatId: string): MessageRecord[] {
 }
 
 export function refreshMessageStatus(message: MessageRecord): void {
+  if (message.kind === "system" || message.senderId === "system") {
+    return;
+  }
   const chat = findChatById(message.chatId);
   if (!chat) {
     return;

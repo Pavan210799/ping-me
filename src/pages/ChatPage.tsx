@@ -1,13 +1,19 @@
+import { useState } from "react";
 import { useChat } from "../context/ChatContext";
 import { ChatBackground } from "../components/chat/ChatBackground";
 import { ChatThread } from "../components/chat/ChatThread";
 import { ConnectionBanner } from "../components/chat/ConnectionBanner";
+import { NewChatModal } from "../components/chat/NewChatModal";
+import { ProfileModal } from "../components/chat/ProfileModal";
 import { Sidebar } from "../components/chat/Sidebar";
 import { ToastStack } from "../components/chat/ToastStack";
 import { Logo } from "../components/Logo";
 
 export function ChatPage() {
-  const { activeChatId, selectChat } = useChat();
+  const { activeChatId, activeChat, selectChat } = useChat();
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const showThread = Boolean(activeChatId && activeChat);
 
   return (
     <div className="app-shell flex h-screen flex-col text-ink">
@@ -15,12 +21,15 @@ export function ChatPage() {
       <div className="flex min-h-0 flex-1">
         <div
           className={`h-full w-full md:flex md:w-80 ${
-            activeChatId ? "hidden md:flex" : "flex"
+            showThread ? "hidden md:flex" : "flex"
           }`}
         >
-          <Sidebar />
+          <Sidebar
+            onNewChat={() => setShowNewChat(true)}
+            onOpenProfile={() => setShowProfile(true)}
+          />
         </div>
-        {activeChatId ? (
+        {showThread ? (
           <ChatThread onBack={() => void selectChat(null)} />
         ) : (
           <div className="chat-wallpaper relative hidden flex-1 place-items-center md:grid">
@@ -38,6 +47,8 @@ export function ChatPage() {
         )}
       </div>
       <ToastStack />
+      {showNewChat && <NewChatModal onClose={() => setShowNewChat(false)} />}
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
     </div>
   );
 }

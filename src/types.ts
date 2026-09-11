@@ -3,6 +3,7 @@ export type User = {
   name: string;
   email: string;
   avatarColor: string;
+  avatarUrl: string;
   online: boolean;
   lastSeen: string;
 };
@@ -30,6 +31,7 @@ export type Message = {
   deletedAt?: string;
   replyToId?: string;
   clientId?: string;
+  kind?: string;
   attachments: Attachment[];
   reactions: Reaction[];
   status: string;
@@ -67,6 +69,7 @@ export type SocketEvent = {
   messageIds?: string[];
   emoji?: string;
   user?: User;
+  chat?: Chat;
   message?: Message | string;
   userId?: string;
   online?: boolean;

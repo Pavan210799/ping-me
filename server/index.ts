@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import fs from "fs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import { createServer } from "http";
@@ -9,6 +10,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import bcrypt from "bcryptjs";
 import type { MessageRecord, SocketEvent } from "./types.ts";
 import {
+  addGroupMember,
   addMessage,
   createDirectChat,
   createGroupChat,
@@ -26,12 +28,15 @@ import {
   markChatRead,
   markDelivered,
   refreshMessageStatus,
+  removeGroupMember,
   removeMessage,
+  renameGroup,
   searchAllMessages,
   searchMessages,
   setUserOnline,
   toPublicUser,
   updatePassword,
+  updateUserProfile,
 } from "./store.ts";
 
 const JWT_SECRET = "pingme-dev-secret";
@@ -53,13 +58,45 @@ const clients: SocketClient[] = [];
 const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const upload = multer({
-  dest: uploadsDir,
+  storage: multer.diskStorage({
+    destination: uploadsDir,
+    filename(_req, file, cb) {
+      const ext = path.extname(file.originalname || "").toLowerCase();
+      cb(null, crypto.randomUUID() + ext);
+    },
+  }),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static(uploadsDir));
+app.use(
+  "/uploads",
+  express.static(uploadsDir, {
+    setHeaders(res, filePath) {
+      if (path.extname(filePath)) {
+        return;
+      }
+      try {
+        const fd = fs.openSync(filePath, "r");
+        const buf = Buffer.alloc(12);
+        fs.readSync(fd, buf, 0, 12, 0);
+        fs.closeSync(fd);
+        if (buf[0] === 0x89 && buf[1] === 0x50) {
+          res.type("png");
+        } else if (buf[0] === 0xff && buf[1] === 0xd8) {
+          res.type("jpeg");
+        } else if (buf[0] === 0x47 && buf[1] === 0x49) {
+          res.type("gif");
+        } else if (buf[8] === 0x57 && buf[9] === 0x45) {
+          res.type("webp");
+        }
+      } catch {
+        return;
+      }
+    },
+  }),
+);
 app.use(express.static(distDir));
 
 function createToken(userId: string): string {
@@ -133,6 +170,12 @@ function sendToChat(chatId: string, data: unknown, skipUserId?: string): void {
   }
 }
 
+function sendToEveryone(data: unknown): void {
+  for (const client of clients) {
+    sendToSocket(client.socket, data);
+  }
+}
+
 function sendJsonError(res: express.Response, status: number, message: string): void {
   res.status(status).json({ message });
 }
@@ -197,6 +240,28 @@ app.get("/api/auth/me", (req, res) => {
   res.json(toPublicUser(user));
 });
 
+app.post("/api/auth/profile", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) {
+    return;
+  }
+  try {
+    const updated = updateUserProfile(
+      user.id,
+      String(req.body.name ?? ""),
+      String(req.body.email ?? ""),
+      String(req.body.currentPassword ?? ""),
+      String(req.body.newPassword ?? ""),
+      String(req.body.avatarUrl ?? user.avatarUrl ?? ""),
+    );
+    const publicUser = toPublicUser(updated);
+    sendToEveryone({ type: "user:updated", user: publicUser });
+    res.json(publicUser);
+  } catch (err) {
+    sendJsonError(res, 400, err instanceof Error ? err.message : "Could not update profile.");
+  }
+});
+
 app.get("/api/users", (req, res) => {
   const user = requireUser(req, res);
   if (!user) {
@@ -249,7 +314,93 @@ app.post("/api/chats/group", (req, res) => {
     return;
   }
   const chat = createGroupChat(name, memberIds, user.id);
+  const created = listMessages(chat.id, 20);
+  for (let i = 0; i < created.messages.length; i += 1) {
+    sendToChat(chat.id, { type: "message:new", message: created.messages[i] });
+  }
+  broadcastChatUpdated(chat.id);
   res.json(chatSummary(chat.id, user.id));
+});
+
+function broadcastChatUpdated(chatId: string): void {
+  const chat = findChatById(chatId);
+  if (!chat) {
+    return;
+  }
+  for (const memberId of chat.memberIds) {
+    sendToUser(memberId, {
+      type: "chat:updated",
+      chat: chatSummary(chat.id, memberId),
+    });
+  }
+}
+
+function broadcastSystemMessage(message: MessageRecord): void {
+  sendToChat(message.chatId, { type: "message:new", message });
+  const chat = findChatById(message.chatId);
+  if (!chat) {
+    return;
+  }
+  for (const memberId of chat.memberIds) {
+    sendToUser(memberId, {
+      type: "unread",
+      chatId: chat.id,
+      count: getUnreadCount(memberId, chat.id),
+    });
+  }
+  broadcastChatUpdated(message.chatId);
+}
+
+app.patch("/api/chats/:chatId", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) {
+    return;
+  }
+  try {
+    const result = renameGroup(req.params.chatId, user.id, String(req.body.name ?? ""));
+    broadcastSystemMessage(result.message);
+    res.json({
+      chat: chatSummary(result.chat.id, user.id),
+      message: result.message,
+    });
+  } catch (error) {
+    sendJsonError(res, 400, error instanceof Error ? error.message : "Could not rename group.");
+  }
+});
+
+app.post("/api/chats/:chatId/members", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) {
+    return;
+  }
+  try {
+    const result = addGroupMember(req.params.chatId, user.id, String(req.body.userId ?? ""));
+    broadcastSystemMessage(result.message);
+    res.json({
+      chat: chatSummary(result.chat.id, user.id),
+      message: result.message,
+    });
+  } catch (error) {
+    sendJsonError(res, 400, error instanceof Error ? error.message : "Could not add member.");
+  }
+});
+
+app.delete("/api/chats/:chatId/members/:userId", (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) {
+    return;
+  }
+  try {
+    const result = removeGroupMember(req.params.chatId, user.id, req.params.userId);
+    sendToUser(result.removedUserId, { type: "chat:removed", chatId: result.chat.id });
+    broadcastSystemMessage(result.message);
+    res.json({
+      chat: chatSummary(result.chat.id, user.id),
+      message: result.message,
+    });
+  } catch (error) {
+    sendJsonError(res, 400, error instanceof Error ? error.message : "Could not remove member.");
+  }
 });
 
 app.get("/api/chats/:chatId/messages", (req, res) => {
@@ -264,7 +415,14 @@ app.get("/api/chats/:chatId/messages", (req, res) => {
   }
   const limit = Number(req.query.limit ?? 30);
   const before = typeof req.query.before === "string" ? req.query.before : undefined;
-  res.json(listMessages(chat.id, limit, before));
+  const result = listMessages(chat.id, limit, before);
+  if (before) {
+    setTimeout(function () {
+      res.json(result);
+    }, 700);
+    return;
+  }
+  res.json(result);
 });
 
 app.get("/api/chats/:chatId/messages/search", (req, res) => {
@@ -450,13 +608,14 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
 
   if (event.type === "message:react") {
     const message = findMessageById(event.messageId || "");
-    if (!message) {
+    const emoji: string = event.emoji || "";
+    if (!message || !emoji) {
       return;
     }
     const current = message.reactions.find((reaction) => reaction.userId === userId);
     message.reactions = message.reactions.filter((reaction) => reaction.userId !== userId);
-    if (!current || current.emoji !== event.emoji) {
-      message.reactions.push({ emoji: event.emoji, userId });
+    if (!current || current.emoji !== emoji) {
+      message.reactions.push({ emoji: emoji, userId: userId });
     }
     sendToChat(message.chatId, { type: "message:updated", message });
     return;
@@ -467,12 +626,9 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
     if (!chat || !chat.memberIds.includes(userId)) {
       return;
     }
-    markChatRead(userId, chat.id, event.messageIds || []);
-    for (const messageId of event.messageIds || []) {
-      const message = findMessageById(messageId);
-      if (message) {
-        sendToChat(chat.id, { type: "message:updated", message });
-      }
+    const updated = markChatRead(userId, chat.id, event.messageIds || []);
+    for (let i = 0; i < updated.length; i += 1) {
+      sendToChat(chat.id, { type: "message:updated", message: updated[i] });
     }
     sendToUser(userId, { type: "unread", chatId: chat.id, count: 0 });
     return;

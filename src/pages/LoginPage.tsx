@@ -7,8 +7,8 @@ import { useAuth } from "../context/AuthContext";
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("pavan@gmail.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,7 +27,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthLayout title="Welcome back, Pavan" subtitle="Log in to continue your conversations.">
+    <AuthLayout title="Welcome back" subtitle="Log in to continue your conversations.">
       <form onSubmit={handleSubmit} className="space-y-3">
         <label className="block text-sm text-secondary">
           Email
@@ -36,6 +36,8 @@ export function LoginPage() {
             onChange={(event) => setEmail(event.target.value)}
             type="email"
             required
+            placeholder="Enter your email"
+            autoComplete="email"
             className="mt-1 w-full rounded-xl border border-line bg-card px-3 py-2.5 text-ink outline-none transition focus:border-accent"
           />
         </label>
@@ -43,6 +45,8 @@ export function LoginPage() {
           label="Password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          placeholder="Enter your password"
+          autoComplete="current-password"
           required
         />
         <div className="flex justify-end">
@@ -66,9 +70,6 @@ export function LoginPage() {
         <Link to="/signup" className="font-medium text-accent transition hover:underline">
           Create an account
         </Link>
-      </p>
-      <p className="mt-3 text-center text-xs text-subtle">
-        Demo: pavan@gmail.com / 123456
       </p>
     </AuthLayout>
   );

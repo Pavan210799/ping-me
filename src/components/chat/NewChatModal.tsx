@@ -61,8 +61,16 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 animate-fade-in">
-      <div className="flex max-h-[min(36rem,calc(100vh-2rem))] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-line bg-surface/95 p-5 shadow-xl backdrop-blur-xl animate-pop-in">
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[min(40rem,calc(100vh-2rem))] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-line bg-surface/95 p-5 shadow-xl backdrop-blur-xl animate-pop-in"
+        onClick={function (event) {
+          event.stopPropagation();
+        }}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold">New chat</h3>
           <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-hover">
@@ -130,6 +138,8 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
               <Avatar
                 name={person.name}
                 color={person.avatarColor}
+                imageUrl={person.avatarUrl}
+                userId={person.id}
                 online={person.online}
                 showStatus
               />

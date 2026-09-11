@@ -4,6 +4,7 @@ export type UserRecord = {
   email: string;
   passwordHash: string;
   avatarColor: string;
+  avatarUrl: string;
   lastSeen: string;
 };
 
@@ -12,6 +13,7 @@ export type PublicUser = {
   name: string;
   email: string;
   avatarColor: string;
+  avatarUrl: string;
   online: boolean;
   lastSeen: string;
 };
@@ -39,6 +41,7 @@ export type MessageRecord = {
   deletedAt?: string;
   replyToId?: string;
   clientId?: string;
+  kind?: string;
   attachments: Attachment[];
   reactions: Reaction[];
   status: string;

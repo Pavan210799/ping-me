@@ -1,10 +1,14 @@
+// @refresh reset
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  addGroupMemberRequest,
   chatsRequest,
   createDirectChatRequest,
   createGroupChatRequest,
   messagesRequest,
+  removeGroupMemberRequest,
+  renameGroupRequest,
   searchAllMessagesRequest,
   searchMessagesRequest,
   uploadFile,
@@ -29,6 +33,8 @@ type ChatContextValue = {
   connectionStatus: string;
   typingUserIds: string[];
   toasts: ToastItem[];
+  pingChatId: string;
+  pingKey: number;
   searchResults: Message[];
   searching: boolean;
   globalSearchResults: Message[];
@@ -47,15 +53,22 @@ type ChatContextValue = {
   stopTyping: () => void;
   searchInChat: (query: string) => Promise<void>;
   searchAllChats: (query: string) => Promise<void>;
+  revealMessage: (chatId: string, messageId: string) => Promise<void>;
+  highlightMessageId: string | null;
+  highlightNonce: number;
   startDirectChat: (userId: string) => Promise<void>;
   startGroupChat: (name: string, memberIds: string[]) => Promise<void>;
+  renameGroup: (name: string) => Promise<void>;
+  addGroupMember: (userId: string) => Promise<void>;
+  removeGroupMember: (userId: string) => Promise<void>;
   dismissToast: (id: string) => void;
 };
 
-const ChatContext = createContext<ChatContextValue | null>(null);
+export const ChatContext = createContext<ChatContextValue | null>(null);
 const FAIL_WAIT_MS = 8000;
+const TYPING_HIDE_MS = 1400;
 
-function replaceOrAddMessage(list: Message[], incoming: Message) {
+function replaceOrAddMessage(list: Message[], incoming: Message, allowInsert: boolean) {
   const next = [];
   let replaced = false;
 
@@ -63,15 +76,45 @@ function replaceOrAddMessage(list: Message[], incoming: Message) {
     const item = list[i];
     const sameClient = incoming.clientId && item.clientId === incoming.clientId;
     const sameId = item.id === incoming.id;
+    const incomingReadBy = incoming.readBy || [];
+    const incomingDelivered = incoming.deliveredTo || [];
     if (sameClient || sameId) {
-      next.push(incoming);
+      if (item.status === "read" && incoming.status !== "read" && incoming.status !== "failed") {
+        next.push({
+          ...incoming,
+          status: "read",
+          readBy: incomingReadBy.length > 0 ? incomingReadBy : item.readBy || [],
+          deliveredTo: incomingDelivered.length > 0 ? incomingDelivered : item.deliveredTo || [],
+        });
+      } else {
+        next.push({
+          ...incoming,
+          readBy: incomingReadBy,
+          deliveredTo: incomingDelivered,
+          reactions: incoming.reactions || [],
+          attachments: incoming.attachments || [],
+        });
+      }
       replaced = true;
+    } else if (
+      incoming.status === "read" &&
+      item.senderId === incoming.senderId &&
+      item.createdAt <= incoming.createdAt &&
+      item.status !== "read" &&
+      item.status !== "failed"
+    ) {
+      next.push({
+        ...item,
+        status: "read",
+        readBy: incomingReadBy,
+        deliveredTo: incomingDelivered,
+      });
     } else {
       next.push(item);
     }
   }
 
-  if (!replaced) {
+  if (!replaced && allowInsert) {
     next.push(incoming);
   }
 
@@ -79,13 +122,16 @@ function replaceOrAddMessage(list: Message[], incoming: Message) {
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const { user, token } = useAuth();
+  const { user, token, applyUser } = useAuth();
   const socketRef = useRef<ReturnType<typeof connectChatSocket> | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const messagesByChatRef = useRef<{ [chatId: string]: Message[] }>({});
+  const hasMoreByChatRef = useRef<{ [chatId: string]: boolean }>({});
   const userRef = useRef(user);
   const usersByIdRef = useRef<{ [id: string]: User }>({});
   const failTimers = useRef<{ [id: string]: number }>({});
+  const pingTimer = useRef(0);
+  const typingHideTimers = useRef<{ [key: string]: number }>({});
 
   const [chats, setChats] = useState<Chat[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -99,15 +145,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState("offline");
   const [typingByChat, setTypingByChat] = useState<{ [chatId: string]: string[] }>({});
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [pingChatId, setPingChatId] = useState("");
+  const [pingKey, setPingKey] = useState(0);
   const [searchResults, setSearchResults] = useState<Message[]>([]);
   const [searching, setSearching] = useState(false);
   const [globalSearchResults, setGlobalSearchResults] = useState<Message[]>([]);
   const [searchingGlobal, setSearchingGlobal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
+  const [highlightNonce, setHighlightNonce] = useState(0);
 
   activeChatIdRef.current = activeChatId;
   messagesByChatRef.current = messagesByChat;
+  hasMoreByChatRef.current = hasMoreByChat;
   userRef.current = user;
 
   const usersById: { [id: string]: User } = {};
@@ -126,6 +177,53 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setUsers(nextUsers);
   }
 
+  function typingKey(chatId: string, userId: string) {
+    return chatId + ":" + userId;
+  }
+
+  function clearTypingHideTimer(chatId: string, userId: string) {
+    const key = typingKey(chatId, userId);
+    if (typingHideTimers.current[key]) {
+      window.clearTimeout(typingHideTimers.current[key]);
+      delete typingHideTimers.current[key];
+    }
+  }
+
+  function showTyping(chatId: string, userId: string) {
+    clearTypingHideTimer(chatId, userId);
+    setTypingByChat(function (current) {
+      const existing = current[chatId] || [];
+      if (existing.includes(userId)) {
+        return current;
+      }
+      const nextIds = existing.slice();
+      nextIds.push(userId);
+      return { ...current, [chatId]: nextIds };
+    });
+  }
+
+  function hideTyping(chatId: string, userId: string) {
+    clearTypingHideTimer(chatId, userId);
+    setTypingByChat(function (current) {
+      const existing = current[chatId] || [];
+      const nextIds = [];
+      for (let i = 0; i < existing.length; i += 1) {
+        if (existing[i] !== userId) {
+          nextIds.push(existing[i]);
+        }
+      }
+      return { ...current, [chatId]: nextIds };
+    });
+  }
+
+  function hideTypingSoon(chatId: string, userId: string) {
+    clearTypingHideTimer(chatId, userId);
+    const key = typingKey(chatId, userId);
+    typingHideTimers.current[key] = window.setTimeout(function () {
+      hideTyping(chatId, userId);
+    }, TYPING_HIDE_MS);
+  }
+
   function markVisibleRead(chatId: string, list: Message[]) {
     const currentUser = userRef.current;
     if (!currentUser) {
@@ -135,12 +233,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const unreadIds: string[] = [];
     for (let i = 0; i < list.length; i += 1) {
       const message = list[i];
-      if (message.senderId !== currentUser.id && !message.readBy.includes(currentUser.id)) {
-        unreadIds.push(message.id);
+      const readBy = message.readBy || [];
+      if (
+        message.kind === "system" ||
+        message.senderId === "system" ||
+        message.senderId === currentUser.id ||
+        readBy.includes(currentUser.id)
+      ) {
+        continue;
       }
+      unreadIds.push(message.id);
     }
 
-    if (unreadIds.length === 0) {
+    if (unreadIds.length === 0 && list.length === 0) {
       return;
     }
 
@@ -153,8 +258,62 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function upsertChat(incoming: Chat) {
+    setChats(function (current) {
+      const next = [];
+      let exists = false;
+      for (let i = 0; i < current.length; i += 1) {
+        const chat = current[i];
+        if (chat.id === incoming.id) {
+          exists = true;
+          next.push({ ...chat, ...incoming });
+        } else {
+          next.push(chat);
+        }
+      }
+      if (!exists) {
+        next.push(incoming);
+      }
+      next.sort(function (a, b) {
+        const timeA = a.lastMessage ? a.lastMessage.createdAt : a.createdAt;
+        const timeB = b.lastMessage ? b.lastMessage.createdAt : b.createdAt;
+        if (timeA > timeB) {
+          return -1;
+        }
+        if (timeA < timeB) {
+          return 1;
+        }
+        return 0;
+      });
+      return next;
+    });
+  }
+
   function handleSocketEvent(event: SocketEvent) {
     const currentUser = userRef.current;
+
+    if (event.type === "user:updated" && event.user) {
+      const updated = event.user;
+      applyUser(updated);
+      setUsers(function (current) {
+        const next = [];
+        let found = false;
+        for (let i = 0; i < current.length; i += 1) {
+          const person = current[i];
+          if (person.id === updated.id) {
+            found = true;
+            next.push(updated);
+          } else {
+            next.push(person);
+          }
+        }
+        if (!found && (!currentUser || currentUser.id !== updated.id)) {
+          next.push(updated);
+        }
+        return next;
+      });
+      return;
+    }
 
     if (event.type === "presence" && event.userId) {
       setUsers(function (current) {
@@ -177,23 +336,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     if (event.type === "typing" && event.chatId && event.userId) {
-      setTypingByChat(function (current) {
-        const existing = current[event.chatId as string] || [];
-        let nextIds: string[] = [];
-        if (event.isTyping) {
-          nextIds = existing.slice();
-          if (!nextIds.includes(event.userId as string)) {
-            nextIds.push(event.userId as string);
-          }
-        } else {
-          for (let i = 0; i < existing.length; i += 1) {
-            if (existing[i] !== event.userId) {
-              nextIds.push(existing[i]);
-            }
-          }
-        }
-        return { ...current, [event.chatId as string]: nextIds };
-      });
+      if (event.isTyping) {
+        showTyping(event.chatId, event.userId);
+      } else {
+        hideTypingSoon(event.chatId, event.userId);
+      }
       return;
     }
 
@@ -213,8 +360,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (event.type === "chat:updated" && event.chat) {
+      upsertChat(event.chat);
+      return;
+    }
+
+    if (event.type === "chat:removed" && event.chatId) {
+      const removedId = event.chatId;
+      setChats(function (current) {
+        const next = [];
+        for (let i = 0; i < current.length; i += 1) {
+          if (current[i].id !== removedId) {
+            next.push(current[i]);
+          }
+        }
+        return next;
+      });
+      setMessagesByChat(function (current) {
+        const next = { ...current };
+        delete next[removedId];
+        return next;
+      });
+      if (activeChatIdRef.current === removedId) {
+        setActiveChatId(null);
+        setReplyTo(null);
+      }
+      return;
+    }
+
     if ((event.type === "message:new" || event.type === "message:updated") && event.message && typeof event.message !== "string") {
       const incoming = event.message;
+      hideTyping(incoming.chatId, incoming.senderId);
       const timerKey = incoming.clientId || incoming.id;
       if (failTimers.current[timerKey]) {
         window.clearTimeout(failTimers.current[timerKey]);
@@ -225,7 +401,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const list = current[incoming.chatId] || [];
         return {
           ...current,
-          [incoming.chatId]: replaceOrAddMessage(list, incoming),
+          [incoming.chatId]: replaceOrAddMessage(list, incoming, event.type === "message:new"),
         };
       });
 
@@ -247,8 +423,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           if (chat.id !== incoming.chatId) {
             next.push(chat);
           } else {
+            const isSystem = incoming.kind === "system" || incoming.senderId === "system";
             const isIncoming =
-              currentUser && incoming.senderId !== currentUser.id && event.type === "message:new";
+              currentUser && incoming.senderId !== currentUser.id && event.type === "message:new" && !isSystem;
             const isViewing = activeChatIdRef.current === incoming.chatId;
             let unreadCount = chat.unreadCount;
             if (isIncoming && !isViewing) {
@@ -278,9 +455,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (event.type === "message:new" && currentUser && incoming.senderId !== currentUser.id) {
         const viewing = activeChatIdRef.current === incoming.chatId && !document.hidden;
+        const isSystem = incoming.kind === "system" || incoming.senderId === "system";
         if (viewing) {
           markVisibleRead(incoming.chatId, [incoming]);
-        } else {
+        } else if (!isSystem) {
           const sender = usersByIdRef.current[incoming.senderId];
           const senderName = sender ? sender.name : "New message";
           const toast = {
@@ -292,7 +470,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           setToasts(function (current) {
             return [toast, ...current].slice(0, 4);
           });
-          if (Notification.permission === "granted") {
+          setPingChatId(incoming.chatId);
+          setPingKey(Date.now());
+          if (pingTimer.current) {
+            window.clearTimeout(pingTimer.current);
+          }
+          pingTimer.current = window.setTimeout(function () {
+            setPingChatId("");
+          }, 2200);
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             new Notification("PingMe · " + senderName, {
               body: incoming.text || "Sent an attachment",
             });
@@ -355,13 +541,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
     socketRef.current = socket;
 
-    if (Notification.permission === "default") {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
       void Notification.requestPermission();
     }
 
     return function () {
       socket.close();
       socketRef.current = null;
+      const keys = Object.keys(typingHideTimers.current);
+      for (let i = 0; i < keys.length; i += 1) {
+        window.clearTimeout(typingHideTimers.current[keys[i]]);
+      }
+      typingHideTimers.current = {};
     };
   }, [token, user]);
 
@@ -370,13 +561,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setReplyTo(null);
     setSearchResults([]);
     setChatError("");
+    setPingChatId("");
+    setHighlightMessageId(null);
     if (!chatId) {
-      return;
-    }
-
-    const cached = messagesByChatRef.current[chatId];
-    if (cached) {
-      markVisibleRead(chatId, cached);
       return;
     }
 
@@ -389,6 +576,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setHasMoreByChat(function (current) {
         return { ...current, [chatId]: result.hasMore };
       });
+      messagesByChatRef.current = { ...messagesByChatRef.current, [chatId]: result.messages };
+      hasMoreByChatRef.current = { ...hasMoreByChatRef.current, [chatId]: result.hasMore };
       markVisibleRead(chatId, result.messages);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "Could not load messages.");
@@ -420,6 +609,52 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoadingMore(false);
     }
+  }
+
+  function listHasMessage(chatId: string, messageId: string) {
+    const list = messagesByChatRef.current[chatId] || [];
+    for (let i = 0; i < list.length; i += 1) {
+      if (list[i].id === messageId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function ensureMessageLoaded(chatId: string, messageId: string) {
+    let guard = 0;
+    while (!listHasMessage(chatId, messageId) && hasMoreByChatRef.current[chatId] && guard < 40) {
+      const current = messagesByChatRef.current[chatId] || [];
+      const oldest = current[0];
+      if (!oldest) {
+        return;
+      }
+      setLoadingMore(true);
+      try {
+        const result = await messagesRequest(chatId, oldest.id);
+        const nextList = result.messages.concat(current);
+        messagesByChatRef.current = { ...messagesByChatRef.current, [chatId]: nextList };
+        hasMoreByChatRef.current = { ...hasMoreByChatRef.current, [chatId]: result.hasMore };
+        setMessagesByChat(function (existing) {
+          return { ...existing, [chatId]: nextList };
+        });
+        setHasMoreByChat(function (existing) {
+          return { ...existing, [chatId]: result.hasMore };
+        });
+      } finally {
+        setLoadingMore(false);
+      }
+      guard += 1;
+    }
+  }
+
+  async function revealMessage(chatId: string, messageId: string) {
+    if (activeChatIdRef.current !== chatId) {
+      await selectChat(chatId);
+    }
+    setHighlightMessageId(messageId);
+    setHighlightNonce(Date.now());
+    await ensureMessageLoaded(chatId, messageId);
   }
 
   function queueFailTimer(clientId: string, chatId: string) {
@@ -559,6 +794,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     connectionStatus,
     typingUserIds: activeChatId && typingByChat[activeChatId] ? typingByChat[activeChatId] : [],
     toasts,
+    pingChatId,
+    pingKey,
     searchResults,
     searching,
     globalSearchResults,
@@ -566,6 +803,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     uploadProgress,
     replyTo,
     setReplyTo,
+    revealMessage,
+    highlightMessageId,
+    highlightNonce,
     selectChat,
     loadMore,
     sendMessage,
@@ -631,6 +871,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const chat = await createGroupChatRequest(name, memberIds);
       await refreshLists();
       await selectChat(chat.id);
+    },
+    async renameGroup(name) {
+      if (!activeChatId) {
+        return;
+      }
+      const result = await renameGroupRequest(activeChatId, name);
+      upsertChat(result.chat);
+      handleSocketEventRef.current({ type: "message:new", message: result.message });
+    },
+    async addGroupMember(userId) {
+      if (!activeChatId) {
+        return;
+      }
+      const result = await addGroupMemberRequest(activeChatId, userId);
+      upsertChat(result.chat);
+      handleSocketEventRef.current({ type: "message:new", message: result.message });
+    },
+    async removeGroupMember(userId) {
+      if (!activeChatId) {
+        return;
+      }
+      const result = await removeGroupMemberRequest(activeChatId, userId);
+      upsertChat(result.chat);
+      handleSocketEventRef.current({ type: "message:new", message: result.message });
     },
     dismissToast(id) {
       setToasts(function (current) {

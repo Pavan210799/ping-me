@@ -23,7 +23,7 @@ export function Composer() {
     window.clearTimeout(typingTimer.current);
     typingTimer.current = window.setTimeout(() => {
       stopTyping();
-    }, 1200);
+    }, 800);
   }
 
   async function submit() {

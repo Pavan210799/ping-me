@@ -107,8 +107,35 @@ export async function meRequest() {
     },
   });
 
+  if (response.status === 401) {
+    throw new Error("unauthorized");
+  }
+
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Failed to load profile."));
+  }
+
+  return response.json() as Promise<User>;
+}
+
+export async function updateProfileRequest(data: {
+  name: string;
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+  avatarUrl: string;
+}) {
+  const response = await fetch("/api/auth/profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to update profile."));
   }
 
   return response.json() as Promise<User>;
@@ -176,7 +203,56 @@ export async function createGroupChatRequest(name: string, memberIds: string[]) 
   return response.json() as Promise<Chat>;
 }
 
-const MESSAGE_PAGE_SIZE = 8;
+export async function renameGroupRequest(chatId: string, name: string) {
+  const response = await fetch(`/api/chats/${chatId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to rename group."));
+  }
+
+  return response.json() as Promise<{ chat: Chat; message: Message }>;
+}
+
+export async function addGroupMemberRequest(chatId: string, userId: string) {
+  const response = await fetch(`/api/chats/${chatId}/members`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ userId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to add member."));
+  }
+
+  return response.json() as Promise<{ chat: Chat; message: Message }>;
+}
+
+export async function removeGroupMemberRequest(chatId: string, userId: string) {
+  const response = await fetch(`/api/chats/${chatId}/members/${userId}`, {
+    method: "DELETE",
+    headers: {
+      ...authHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Failed to remove member."));
+  }
+
+  return response.json() as Promise<{ chat: Chat; message: Message }>;
+}
+
+const MESSAGE_PAGE_SIZE = 15;
 
 export async function messagesRequest(chatId: string, before?: string) {
   let url = `/api/chats/${chatId}/messages?limit=${MESSAGE_PAGE_SIZE}`;
