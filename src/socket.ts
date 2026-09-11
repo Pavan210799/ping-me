@@ -1,11 +1,5 @@
+import { socketUrl } from "./lib/backend";
 import type { SocketEvent } from "./types";
-
-function getSocketUrl() {
-  if (window.location.protocol === "https:") {
-    return "wss://" + window.location.host + "/ws";
-  }
-  return "ws://" + window.location.host + "/ws";
-}
 
 export function connectChatSocket(options: {
   token: string;
@@ -26,7 +20,7 @@ export function connectChatSocket(options: {
 
   function connect() {
     options.onStatus("connecting");
-    socket = new WebSocket(getSocketUrl());
+    socket = new WebSocket(socketUrl());
 
     socket.onopen = function () {
       retryDelay = 1000;

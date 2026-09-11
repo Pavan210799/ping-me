@@ -39,11 +39,13 @@ import {
   updateUserProfile,
 } from "./store.ts";
 
-const JWT_SECRET = "pingme-dev-secret";
-const PORT = 4000;
+const JWT_SECRET = process.env.JWT_SECRET || "pingme-dev-secret";
+const PORT = Number(process.env.PORT) || 4000;
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
-const uploadsDir = path.join(currentDir, "uploads");
+const uploadsDir = process.env.AWS_LAMBDA_FUNCTION_NAME
+  ? path.join("/tmp", "pingme-uploads")
+  : path.join(currentDir, "uploads");
 const distDir = path.join(currentDir, "..", "dist");
 
 type SocketClient = {
@@ -56,6 +58,8 @@ const server = createServer(app);
 const socketServer = new WebSocketServer({ server, path: "/ws" });
 const clients: SocketClient[] = [];
 const offlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+fs.mkdirSync(uploadsDir, { recursive: true });
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -70,6 +74,9 @@ const upload = multer({
 
 app.use(cors());
 app.use(express.json());
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
 app.use(
   "/uploads",
   express.static(uploadsDir, {
@@ -703,6 +710,10 @@ socketServer.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`PingMe API and WebSocket running on http://localhost:${PORT}`);
-});
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`PingMe API and WebSocket running on http://0.0.0.0:${PORT}`);
+  });
+}
+
+export { app, server };

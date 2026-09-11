@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useChat } from "../../context/ChatContext";
 import { fileSizeLabel, formatTime } from "../../lib/format";
+import { mediaUrl } from "../../lib/backend";
 import type { Message } from "../../types";
 import { Avatar } from "../Avatar";
 import { REACTION_EMOJIS, ThemeEmoji } from "./ThemeEmoji";
@@ -180,14 +181,14 @@ export function MessageBubble({
                   file.kind === "image" ? (
                     <img
                       key={file.id}
-                      src={file.url}
+                      src={mediaUrl(file.url)}
                       alt={file.name}
                       className="mb-2 max-h-56 rounded-xl object-cover"
                     />
                   ) : (
                     <a
                       key={file.id}
-                      href={file.url}
+                      href={mediaUrl(file.url)}
                       target="_blank"
                       rel="noreferrer"
                       className="mb-2 flex items-center gap-2 rounded-xl bg-black/10 px-2 py-2 text-sm"

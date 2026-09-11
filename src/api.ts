@@ -1,3 +1,4 @@
+import { apiUrl } from "./lib/backend";
 import type { Attachment, Chat, Message, User } from "./types";
 
 const TOKEN_KEY = "pingme-token-v2";
@@ -37,7 +38,7 @@ async function getErrorMessage(response: Response, fallback: string) {
 }
 
 export async function loginRequest(email: string, password: string) {
-  const response = await fetch("/api/auth/login", {
+  const response = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -53,7 +54,7 @@ export async function loginRequest(email: string, password: string) {
 }
 
 export async function signupRequest(name: string, email: string, password: string) {
-  const response = await fetch("/api/auth/signup", {
+  const response = await fetch(apiUrl("/api/auth/signup"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -69,7 +70,7 @@ export async function signupRequest(name: string, email: string, password: strin
 }
 
 export async function forgotPasswordRequest(email: string) {
-  const response = await fetch("/api/auth/forgot", {
+  const response = await fetch(apiUrl("/api/auth/forgot"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -85,7 +86,7 @@ export async function forgotPasswordRequest(email: string) {
 }
 
 export async function resetPasswordRequest(email: string, password: string) {
-  const response = await fetch("/api/auth/reset", {
+  const response = await fetch(apiUrl("/api/auth/reset"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -101,7 +102,7 @@ export async function resetPasswordRequest(email: string, password: string) {
 }
 
 export async function meRequest() {
-  const response = await fetch("/api/auth/me", {
+  const response = await fetch(apiUrl("/api/auth/me"), {
     headers: {
       ...authHeaders(),
     },
@@ -125,7 +126,7 @@ export async function updateProfileRequest(data: {
   newPassword: string;
   avatarUrl: string;
 }) {
-  const response = await fetch("/api/auth/profile", {
+  const response = await fetch(apiUrl("/api/auth/profile"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -142,7 +143,7 @@ export async function updateProfileRequest(data: {
 }
 
 export async function usersRequest() {
-  const response = await fetch("/api/users", {
+  const response = await fetch(apiUrl("/api/users"), {
     headers: {
       ...authHeaders(),
     },
@@ -156,7 +157,7 @@ export async function usersRequest() {
 }
 
 export async function chatsRequest() {
-  const response = await fetch("/api/chats", {
+  const response = await fetch(apiUrl("/api/chats"), {
     headers: {
       ...authHeaders(),
     },
@@ -170,7 +171,7 @@ export async function chatsRequest() {
 }
 
 export async function createDirectChatRequest(userId: string) {
-  const response = await fetch("/api/chats/direct", {
+  const response = await fetch(apiUrl("/api/chats/direct"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -187,7 +188,7 @@ export async function createDirectChatRequest(userId: string) {
 }
 
 export async function createGroupChatRequest(name: string, memberIds: string[]) {
-  const response = await fetch("/api/chats/group", {
+  const response = await fetch(apiUrl("/api/chats/group"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -204,7 +205,7 @@ export async function createGroupChatRequest(name: string, memberIds: string[]) 
 }
 
 export async function renameGroupRequest(chatId: string, name: string) {
-  const response = await fetch(`/api/chats/${chatId}`, {
+  const response = await fetch(apiUrl(`/api/chats/${chatId}`), {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -221,7 +222,7 @@ export async function renameGroupRequest(chatId: string, name: string) {
 }
 
 export async function addGroupMemberRequest(chatId: string, userId: string) {
-  const response = await fetch(`/api/chats/${chatId}/members`, {
+  const response = await fetch(apiUrl(`/api/chats/${chatId}/members`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -238,7 +239,7 @@ export async function addGroupMemberRequest(chatId: string, userId: string) {
 }
 
 export async function removeGroupMemberRequest(chatId: string, userId: string) {
-  const response = await fetch(`/api/chats/${chatId}/members/${userId}`, {
+  const response = await fetch(apiUrl(`/api/chats/${chatId}/members/${userId}`), {
     method: "DELETE",
     headers: {
       ...authHeaders(),
@@ -255,7 +256,7 @@ export async function removeGroupMemberRequest(chatId: string, userId: string) {
 const MESSAGE_PAGE_SIZE = 15;
 
 export async function messagesRequest(chatId: string, before?: string) {
-  let url = `/api/chats/${chatId}/messages?limit=${MESSAGE_PAGE_SIZE}`;
+  let url = apiUrl(`/api/chats/${chatId}/messages?limit=${MESSAGE_PAGE_SIZE}`);
   if (before) {
     url = `${url}&before=${before}`;
   }
@@ -274,7 +275,7 @@ export async function messagesRequest(chatId: string, before?: string) {
 }
 
 export async function searchMessagesRequest(chatId: string, query: string) {
-  const url = `/api/chats/${chatId}/messages/search?q=${encodeURIComponent(query)}`;
+  const url = apiUrl(`/api/chats/${chatId}/messages/search?q=${encodeURIComponent(query)}`);
   const response = await fetch(url, {
     headers: {
       ...authHeaders(),
@@ -289,7 +290,7 @@ export async function searchMessagesRequest(chatId: string, query: string) {
 }
 
 export async function searchAllMessagesRequest(query: string) {
-  const url = `/api/messages/search?q=${encodeURIComponent(query)}`;
+  const url = apiUrl(`/api/messages/search?q=${encodeURIComponent(query)}`);
   const response = await fetch(url, {
     headers: {
       ...authHeaders(),
@@ -310,7 +311,7 @@ export function uploadFile(
 ): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
+    xhr.open("POST", apiUrl("/api/upload"));
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
     xhr.upload.onprogress = (event) => {

@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { ChatContext } from "../context/ChatContext";
 import { getInitials } from "../lib/format";
+import { mediaUrl } from "../lib/backend";
 import { Users } from "lucide-react";
 
 const AVATAR_COLOR = "#d95d39";
@@ -47,7 +48,7 @@ export function Avatar({
         {src && !failed ? (
           <img
             key={src}
-            src={src}
+            src={mediaUrl(src)}
             alt={label}
             className="h-full w-full object-cover"
             onError={function () {
