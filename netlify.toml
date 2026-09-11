@@ -5,6 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  VITE_API_URL = "https://ping-me-j67q.onrender.com"
 
 [functions]
   node_bundler = "esbuild"
