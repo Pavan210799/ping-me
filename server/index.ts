@@ -547,6 +547,20 @@ function handleIncomingEvent(client: SocketClient, raw: string): void {
 
   const userId = client.userId;
 
+  if (event.type === "logout") {
+    client.userId = null;
+    const stillConnected = clients.some((item) => item.userId === userId);
+    if (!stillConnected) {
+      markUserOfflineSoon(userId, 0);
+    }
+    try {
+      client.socket.close();
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
   if (event.type === "message:send") {
     const chat = findChatById(event.chatId || "");
     if (!chat || !chat.memberIds.includes(userId)) {
@@ -680,37 +694,55 @@ socketServer.on("connection", (socket) => {
       return;
     }
 
-    const goneUserId = client.userId;
-    const existingTimer = offlineTimers.get(goneUserId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
-    offlineTimers.set(
-      goneUserId,
-      setTimeout(() => {
-        offlineTimers.delete(goneUserId);
-        if (clients.some((item) => item.userId === goneUserId)) {
-          return;
-        }
-
-        setUserOnline(goneUserId, false);
-        const user = findUserById(goneUserId);
-        if (!user) {
-          return;
-        }
-        for (const other of listPublicUsers()) {
-          sendToUser(other.id, {
-            type: "presence",
-            userId: user.id,
-            online: false,
-            lastSeen: user.lastSeen,
-          });
-        }
-      }, 2500),
-    );
+    markUserOfflineSoon(client.userId, 2500);
   });
 });
+
+function broadcastPresence(userId: string, online: boolean): void {
+  setUserOnline(userId, online);
+  const user = findUserById(userId);
+  if (!user) {
+    return;
+  }
+  for (const other of listPublicUsers()) {
+    if (other.id === userId) {
+      continue;
+    }
+    sendToUser(other.id, {
+      type: "presence",
+      userId: user.id,
+      online,
+      lastSeen: user.lastSeen,
+    });
+  }
+}
+
+function markUserOfflineSoon(userId: string, delayMs: number): void {
+  const existingTimer = offlineTimers.get(userId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  if (delayMs <= 0) {
+    offlineTimers.delete(userId);
+    if (clients.some((item) => item.userId === userId)) {
+      return;
+    }
+    broadcastPresence(userId, false);
+    return;
+  }
+
+  offlineTimers.set(
+    userId,
+    setTimeout(() => {
+      offlineTimers.delete(userId);
+      if (clients.some((item) => item.userId === userId)) {
+        return;
+      }
+      broadcastPresence(userId, false);
+    }, delayMs),
+  );
+}
 
 if (!process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.LAMBDA_TASK_ROOT) {
   server.listen(PORT, "0.0.0.0", () => {

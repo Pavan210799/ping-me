@@ -80,6 +80,13 @@ export function connectChatSocket(options: {
       closedByUser = true;
       stopPing();
       if (socket) {
+        if (socket.readyState === WebSocket.OPEN) {
+          try {
+            socket.send(JSON.stringify({ type: "logout" }));
+          } catch {
+            // ignore send failures while closing
+          }
+        }
         socket.close();
       }
     },
