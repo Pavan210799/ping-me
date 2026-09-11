@@ -26,7 +26,7 @@ export function AuthLayout({
             <Logo size={84} />
           </div>
           <h1 className="mt-4 text-3xl font-semibold text-ink">PingMe</h1>
-          <p className="mt-1 text-sm text-quiet">Warm, fast, real-time chat.</p>
+          <p className="mt-1 text-sm text-quiet">Chat with people instantly.</p>
         </div>
         <div className="animate-fade-in rounded-3xl border border-line bg-surface/80 p-6 shadow-[0_20px_50px_-24px_rgba(41,35,31,0.45)] backdrop-blur-xl">
           {hero}
